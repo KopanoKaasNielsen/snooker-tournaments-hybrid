@@ -1,3 +1,71 @@
+import random
+from sqlalchemy.orm import Session
+from app.models import Tournament, Match, Player, TournamentRegistration
+
+
+def distribute_prizes(db: Session, tournament: Tournament, prize_split=(1.0,)):
+    """
+    Distribute prize pool among top finishers.
+    Default: 100% to winner.
+    """
+    prize_pool = tournament.entry_fee * len(tournament.registrations)
+    winners = tournament.final_standings or []
+
+    if not winners:
+        raise ValueError("No final standings provided for prize distribution.")
+
+    # Limit prize split to number of winners
+    split = prize_split[:len(winners)]
+
+    for i, player_id in enumerate(winners):
+        share = split[i] if i < len(split) else 0
+        prize = round(prize_pool * share, 2)
+        player = db.query(Player).get(player_id)
+        if player:
+            player.balance += prize
+
+    db.commit()
+
+
+def generate_knockout_matches(db: Session, tournament: Tournament):
+    """
+    Generate first-round knockout matches.
+    Handles byes for odd player counts.
+    """
+    players = [r.player for r in tournament.registrations]
+    if len(players) < 2:
+        return []
+
+    random.shuffle(players)
+    matches = []
+
+    while len(players) >= 2:
+        p1 = players.pop()
+        p2 = players.pop()
+        match = Match(
+            tournament_id=tournament.id,
+            player1_id=p1.id,
+            player2_id=p2.id,
+            scheduled_at=tournament.date,
+        )
+        db.add(match)
+        matches.append(match)
+
+    # Handle bye (odd number of players)
+    if players:
+        bye_player = players.pop()
+        auto_win = Match(
+            tournament_id=tournament.id,
+            player1_id=bye_player.id,
+            player2_id=None,
+            winner_id=bye_player.id,
+            scheduled_at=tournament.date,
+        )
+        db.add(auto_win)
+        matches.append(auto_win)
+
+    db.commit()
+    return matches
 # app/routes/tournaments.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
