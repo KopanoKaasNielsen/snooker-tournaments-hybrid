@@ -5,6 +5,9 @@ from .. import models
 from .elo import elo_update
 from . import tournaments as svc_tournaments
 
+from app.services.elo import update_elo_ratings
+from app.models import Match, Player
+
 def generate_knockout_draw(db: Session, tournament_id: int):
     regs = svc_tournaments.list_registrations(db, tournament_id)
     player_ids = [r.player_id for r in regs]
@@ -102,3 +105,29 @@ def set_result(db: Session, match_id: int, score1: int, score2: int):
     db.commit()
     db.refresh(m)
     return m
+def update_match_result(db: Session, match_id: int, winner_id: int):
+    match = db.query(Match).get(match_id)
+    if not match:
+        raise ValueError("Match not found")
+
+    if match.winner_id:
+        raise ValueError("Match result already set")
+
+    if match.player1_id == winner_id:
+        loser_id = match.player2_id
+    elif match.player2_id == winner_id:
+        loser_id = match.player1_id
+    else:
+        raise ValueError("Winner must be one of the players in the match")
+
+    # Update Elo ratings
+    winner = db.query(Player).get(winner_id)
+    loser = db.query(Player).get(loser_id)
+
+    winner.elo, loser.elo = update_elo_ratings(winner.elo, loser.elo)
+
+    # Save match result
+    match.winner_id = winner_id
+    db.commit()
+    return matchclear
+    
