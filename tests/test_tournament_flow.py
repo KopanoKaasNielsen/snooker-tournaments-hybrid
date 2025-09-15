@@ -3,12 +3,21 @@ from fastapi.testclient import TestClient
 from app.main import app
 import uuid
 
+
+client = TestClient(app)
 client = TestClient(app)
 
 def unique_name(base: str) -> str:
     return f"{base}_{uuid.uuid4().hex[:6]}"
 
+
+
 def test_full_tournament_flow():
+    # Create players
+    for i in range(1, 5):
+        r = client.post("/players/", json={"name": f"Player {i}"})
+        assert r.status_code == 200, f"Player creation failed: {r.text}"
+
     tournament_data = {
         "name": unique_name("Test Open Flow"),
         "type": "knockout",
@@ -26,9 +35,10 @@ def test_full_tournament_flow():
     for pid in [1, 2, 3, 4]:
         r = client.post(
             f"/tournaments/{tournament_id}/register",
-            json={"player_id": pid, "tournament_id": tournament_id}
+            json={"player_id": pid, "tournament_id": tournament_id},
         )
         assert r.status_code == 200, f"Failed to register player {pid}: {r.text}"
+
 
     # Complete tournament
     winners = [
@@ -42,6 +52,11 @@ def test_full_tournament_flow():
 
 
 def test_register_same_player_twice():
+    # Create player
+    r = client.post("/players/", json={"name": "Player 1"})
+    assert r.status_code == 200
+
+    # Create tournament
     tournament_data = {
         "name": unique_name("Duplicate Test"),
         "type": "knockout",
@@ -50,9 +65,20 @@ def test_register_same_player_twice():
         "race_to": 3,
         "entry_fee": 50,
     }
+    
     response = client.post("/tournaments/", json=tournament_data)
     assert response.status_code == 200, f"Unexpected response: {response.text}"
     tournament_id = response.json()["id"]
+
+
+
+
+# Register player twice
+    r1 = client.post(
+        f"/tournaments/{tournament_id}/register",
+        json={"player_id": 1, "tournament_id": tournament_id},
+    )
+
 
     r1 = client.post(f"/tournaments/{tournament_id}/register", json={"player_id": 1, "tournament_id": tournament_id})
     assert r1.status_code == 200, f"First register failed: {r1.text}"
