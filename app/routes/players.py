@@ -38,3 +38,16 @@ def get_player_elo(player_id: int, db: Session = Depends(get_db)):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     return {"player_id": player.id, "elo": player.elo}
+
+@router.get("/leaderboard")
+def get_leaderboard(limit: int = 10, db: Session = Depends(get_db)):
+    players = (
+        db.query(models.Player)
+        .order_by(models.Player.elo.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {"player_id": p.id, "name": p.name, "elo": p.elo, "balance": p.balance}
+        for p in players
+    ]
