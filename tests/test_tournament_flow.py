@@ -110,3 +110,12 @@ def test_complete_tournament_with_invalid_player():
     ]
     r = client.post(f"/tournaments/{tournament_id}/complete", json=winners)
     assert r.status_code == 400, f"Expected 400 but got {r.status_code}: {r.text}"
+
+    # Create players and deposit balance
+for i in range(1, 5):
+    r = client.post("/players/", json={"name": f"Player {i}"})
+    assert r.status_code == 200
+    pid = r.json()["id"]
+    # Deposit funds for entry
+    client.post(f"/players/{pid}/deposit", json={"amount": 100})
+
