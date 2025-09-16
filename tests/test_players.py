@@ -5,6 +5,21 @@ from app.models import Player
 
 client = TestClient(app)
 
+def test_wallet_transaction_history():
+    r = client.post("/players/", json={"name": "LogTest"})
+    pid = r.json()["id"]
+
+    client.post(f"/players/{pid}/deposit", json={"amount": 100})
+    client.post(f"/players/{pid}/deposit", json={"amount": 50})
+    client.post(f"/players/{pid}/withdraw", json={"amount": 30})
+
+    r = client.get(f"/players/{pid}/transactions")
+    data = r.json()
+    assert len(data) == 3
+    assert data[0]["type"] == "deposit"
+    assert data[-1]["type"] == "withdrawal"
+
+
 
 def test_balance_and_elo_endpoints():
     # Create player

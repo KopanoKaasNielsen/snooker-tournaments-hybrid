@@ -44,3 +44,14 @@ jobs:
         run: |
           python -m pip install black
           black --check .
+
+      - name: Security: bandit
+        run: |
+          pip install bandit
+          bandit -q -r app || true
+
+      - name: Dependencies: safety
+        run: |
+          pip install safety
+          safety check -r requirements.txt || true
+
