@@ -3,6 +3,8 @@ from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from .database import Base
+from sqlalchemy import Enum as PgEnum
+
 
 
 class TournamentType(enum.Enum):
@@ -25,6 +27,7 @@ class Player(Base):
 
     registrations = relationship('TournamentRegistration', back_populates='player')
     results = relationship('TournamentResult', back_populates='player')
+    transactions = relationship("WalletTransaction", back_populates="player", cascade="all, delete-orphan")
 
 class Tournament(Base):
     __tablename__ = "tournaments"
@@ -84,3 +87,20 @@ class TournamentResult(Base):
 
     tournament = relationship('Tournament', back_populates='results')
     player = relationship('Player', back_populates='results')
+
+
+
+class TransactionType(str, enum.Enum):
+    deposit = "deposit"
+    withdrawal = "withdrawal"
+
+class WalletTransaction(Base):
+    __tablename__ = "wallet_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    player_id = Column(Integer, ForeignKey("players.id"))
+    type = Column(PgEnum(TransactionType), nullable=False)
+    amount = Column(float, nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+    player = relationship("Player", back_populates="transactions")
