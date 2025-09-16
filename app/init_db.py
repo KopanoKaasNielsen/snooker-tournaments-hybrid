@@ -21,3 +21,5 @@ if __name__ == '__main__':
     seed_data()
 
 # NOTE: avoid duplicates by checking existence before inserting
+# idempotent seed setup (avoid duplicate inserts)
+# idempotent seed setup (avoid duplicate inserts)

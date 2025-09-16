@@ -38,10 +38,6 @@ class Tournament(TournamentBase):
 class TournamentRegistrationBase(BaseModel):
     player_id: int
 
-class TournamentRegistrationCreate(TournamentRegistrationBase):
-    pass
-
-class TournamentRegistration(TournamentRegistrationBase):
     id: int
     tournament_id: int
 
@@ -102,3 +98,21 @@ class Match(MatchBase):
 
     class Config:
         from_attributes = True
+
+class TournamentRegistrationCreate(BaseModel):
+    player_id: int
+
+
+class PlayerBalanceOut(BaseModel):
+    player_id: int
+    balance: float
+
+class PlayerEloOut(BaseModel):
+    player_id: int
+    elo: int
+
+class WalletTransactionOut(BaseModel):
+    id: int
+    type: str
+    amount: float
+    timestamp: str

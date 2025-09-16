@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
-from app import crud, models, schemas
+from app import crud, models, schemas, schemas, schemas
 from app.schemas import TournamentRegistrationCreate
 from app.services import wallet
 
@@ -31,16 +31,8 @@ def register_player(
         raise HTTPException(status_code=404, detail="Tournament not found.")
 
     player = crud.get_player(db, registration.player_id)
-    if not player:
-        raise HTTPException(status_code=404, detail="Player not found")
-
-    # 💰 Withdraw entry fee
-    try:
-        wallet.withdraw(db, player.id, tournament.entry_fee)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Insufficient balance for entry fee.")
-
-    return crud.register_player(db, tournament_id, player.id)
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
 
 @router.post('/{tournament_id}/complete', response_model=List[schemas.TournamentResult])
 def complete_tournament(tournament_id: int, winners: List[schemas.WinnerCreate], db: Session = Depends(get_db)):

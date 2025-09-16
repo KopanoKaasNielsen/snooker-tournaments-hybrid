@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app import crud, models
 
-router = APIRouter()
+router = APIRouter(prefix="/players", tags=["players"])
 
 router = APIRouter(prefix='/players', tags=['players'])
 
