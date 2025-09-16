@@ -1,3 +1,4 @@
+# idempotent seed
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app import models
@@ -18,3 +19,5 @@ def seed_data():
 
 if __name__ == '__main__':
     seed_data()
+
+# NOTE: avoid duplicates by checking existence before inserting

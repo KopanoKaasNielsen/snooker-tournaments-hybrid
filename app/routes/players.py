@@ -24,7 +24,7 @@ def list_players(db: Session = Depends(get_db)):
 def get_player(player_id: int, db: Session = Depends(get_db)):
     return crud.get_player(db, player_id)
 ############################################
-@router.get("/{player_id}/balance")
+@router.get("/{player_id}/balance", response_model=__import__('app.schemas',fromlist=['']).schemas.PlayerBalanceOut)
 def get_player_balance(player_id: int, db: Session = Depends(get_db)):
     player = db.query(models.Player).get(player_id)
     if not player:
@@ -32,7 +32,7 @@ def get_player_balance(player_id: int, db: Session = Depends(get_db)):
     return {"player_id": player.id, "balance": player.balance}
 
 
-@router.get("/{player_id}/elo")
+@router.get("/{player_id}/elo", response_model=__import__('app.schemas',fromlist=['']).schemas.PlayerEloOut)
 def get_player_elo(player_id: int, db: Session = Depends(get_db)):
     player = db.query(models.Player).get(player_id)
     if not player:

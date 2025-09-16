@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from typing import List
 from app.database import get_db
-from app import crud, models
+from app import crud, models, schemas
 from app.schemas import TournamentRegistrationCreate
 from app.services import wallet
 
-router = APIRouter()
+
+
+router = APIRouter(prefix="/tournaments", tags=["tournaments"])
 
 router = APIRouter(prefix='/tournaments', tags=['tournaments'])
 
@@ -29,9 +32,7 @@ def register_player(
 
     player = crud.get_player(db, registration.player_id)
     if not player:
-        if not registration.player_name:
-            raise HTTPException(status_code=404, detail=f"Player {registration.player_id} not found; provide name to create.")
-        player = crud.create_player(db, {"name": registration.player_name})
+        raise HTTPException(status_code=404, detail="Player not found")
 
     # 💰 Withdraw entry fee
     try:
