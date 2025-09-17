@@ -31,7 +31,7 @@ def register_player(
         raise HTTPException(status_code=404, detail="Tournament not found.")
 
     player = crud.get_player(db, registration.player_id)
-        if not player:
+    if not player:
             raise HTTPException(status_code=404, detail="Player not found")
 
 @router.post('/{tournament_id}/complete', response_model=List[schemas.TournamentResult])
