@@ -5,3 +5,6 @@ __pycache__/
 # Ignore Python cache files
 __pycache__/
 *.pyc
+
+snooker.db
+test.db
