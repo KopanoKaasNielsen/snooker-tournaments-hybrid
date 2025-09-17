@@ -1,9 +1,13 @@
+
+
 import enum
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey, Boolean
+from sqlalchemy import Float, Column, Integer, String, DateTime, Enum, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from .database import Base
-from sqlalchemy import Enum as PgEnum
+from sqlalchemy import Float, Enum as PgEnum
+from sqlalchemy import Float, Column, Integer, String, ForeignKey, DateTime, Enum, Float
+
 
 
 
@@ -100,7 +104,79 @@ class WalletTransaction(Base):
     id = Column(Integer, primary_key=True, index=True)
     player_id = Column(Integer, ForeignKey("players.id"))
     type = Column(PgEnum(TransactionType), nullable=False)
-    amount = Column(float, nullable=False)
+    amount = Column(Float, nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+    player = relationship("Player", back_populates="transactions")
+import enum
+from datetime import datetime
+
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Boolean,
+    Float,
+)
+from sqlalchemy import Enum as PgEnum
+from sqlalchemy.orm import relationship
+
+from .database import Base
+
+
+class PlayerStatus(str, enum.Enum):
+    active = "active"
+    banned = "banned"
+
+
+class WalletStatus(str, enum.Enum):
+    active = "active"
+    suspended = "suspended"
+
+
+class TransactionType(str, enum.Enum):
+    deposit = "deposit"
+    withdrawal = "withdrawal"
+
+
+class Player(Base):
+    __tablename__ = "players"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    phone_number = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    status = Column(PgEnum(PlayerStatus), default=PlayerStatus.active, nullable=False)
+
+    wallet = relationship("Wallet", back_populates="player", uselist=False)
+    transactions = relationship("WalletTransaction", back_populates="player")
+
+
+class Wallet(Base):
+    __tablename__ = "wallets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    player_id = Column(Integer, ForeignKey("players.id"))
+    balance = Column(Float, default=0.0)
+    status = Column(PgEnum(WalletStatus), default=WalletStatus.active, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    player = relationship("Player", back_populates="wallet")
+
+
+class WalletTransaction(Base):
+    __tablename__ = "wallet_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    player_id = Column(Integer, ForeignKey("players.id"))
+    type = Column(PgEnum(TransactionType), nullable=False)
+    amount = Column(Float, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
 
     player = relationship("Player", back_populates="transactions")
