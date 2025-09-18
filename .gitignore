@@ -8,3 +8,7 @@ __pycache__/
 
 snooker.db
 test.db
+.coverage
+*.db
+.pytest_cache/
+venv/
