@@ -7,7 +7,8 @@ from sqlalchemy.orm import relationship
 from .database import Base
 from sqlalchemy import Float, Enum as PgEnum
 from sqlalchemy import Float, Column, Integer, String, ForeignKey, DateTime, Enum, Float
-
+from sqlalchemy import MetaData
+from .database import Base
 
 
 
@@ -180,3 +181,6 @@ class WalletTransaction(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
 
     player = relationship("Player", back_populates="transactions")
+
+
+Base.metadata.clear()
