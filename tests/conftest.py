@@ -1,34 +1,47 @@
-# tests/conftest.py
-import os, pathlib, pytest
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
-from app.database import Base
+# Import DB primitives directly from your app's DB module
+from app.database import Base, get_db
 from app.main import app
-from app.dependencies import get_db
 
-TEST_DB_PATH = pathlib.Path("./test.db")
-TEST_DB_URL = f"sqlite:///{TEST_DB_PATH}"
+# Single in-memory SQLite database shared across tests
+SQLALCHEMY_DATABASE_URL = "sqlite://"
 
-engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,  # One memory DB for the whole process
+)
+
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 @pytest.fixture(scope="session", autouse=True)
-def create_test_database():
-    if TEST_DB_PATH.exists():
-        os.remove(TEST_DB_PATH)
+def _create_schema_once():
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
-    if TEST_DB_PATH.exists():
-        os.remove(TEST_DB_PATH)
+
+@pytest.fixture()
+def db_session():
+    # Wrap each test in a transaction and roll it back
+    connection = engine.connect()
+    txn = connection.begin()
+    session = TestingSessionLocal(bind=connection)
+    try:
+        yield session
+    finally:
+        session.close()
+        txn.rollback()
+        connection.close()
 
 @pytest.fixture(autouse=True)
-def override_get_db(monkeypatch):
-    def _override():
-        db = TestingSessionLocal()
+def _override_get_db(monkeypatch, db_session):
+    def _get_db():
         try:
-            yield db
+            yield db_session
         finally:
-            db.close()
-    app.dependency_overrides[get_db] = _override
+            pass
+    app.dependency_overrides[get_db] = _get_db

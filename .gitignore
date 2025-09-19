@@ -16,3 +16,6 @@ venv/
 *.db
 .pytest_cache/
 .coverage
+*.pyo
+.mypy_cache/
+.DS_Store
