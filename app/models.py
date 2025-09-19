@@ -7,9 +7,15 @@ from sqlalchemy.orm import relationship
 from .database import Base
 from sqlalchemy import Float, Enum as PgEnum
 from sqlalchemy import Float, Column, Integer, String, ForeignKey, DateTime, Enum, Float
+from sqlalchemy import MetaData
+from .database import Base
 
-
-
+# app/models.py
+from sqlalchemy import Column, Integer, String, DateTime, Enum as SAEnum, ForeignKey, Boolean, Float
+from sqlalchemy.orm import relationship
+from datetime import datetime
+from .database import Base
+import enum
 
 class TournamentType(enum.Enum):
     league = "league"
@@ -137,13 +143,17 @@ class WalletStatus(str, enum.Enum):
     suspended = "suspended"
 
 
-class TransactionType(str, enum.Enum):
-    deposit = "deposit"
-    withdrawal = "withdrawal"
+class TransactionType(enum.Enum):
+    DEPOSIT = "deposit"
+    WITHDRAW = "withdraw"
+    PRIZE = "prize"
+    FEE = "fee"
 
 
 class Player(Base):
     __tablename__ = "players"
+    
+    # ... your other columns ...
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
@@ -172,11 +182,16 @@ class Wallet(Base):
 
 class WalletTransaction(Base):
     __tablename__ = "wallet_transactions"
-
     id = Column(Integer, primary_key=True, index=True)
-    player_id = Column(Integer, ForeignKey("players.id"))
-    type = Column(PgEnum(TransactionType), nullable=False)
-    amount = Column(Float, nullable=False)
+    player_id = Column(Integer, ForeignKey("players.id"), nullable=False)
+    type = Column(SAEnum(TransactionType), nullable=False)
+    amount = Column(Float, nullable=False)  # <-- correct SQLAlchemy type
     timestamp = Column(DateTime, default=datetime.utcnow)
-
     player = relationship("Player", back_populates="transactions")
+
+Base.metadata.clear()
+
+
+
+
+
