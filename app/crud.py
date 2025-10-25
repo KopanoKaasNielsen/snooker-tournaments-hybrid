@@ -1,14 +1,16 @@
-from sqlalchemy.orm import Session
-from fastapi import HTTPException
-from typing import List
-from . import models, schemas
 from datetime import datetime
+from typing import List
+
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+
+from . import models, schemas
 
 def create_player(db: Session, player: schemas.PlayerCreate):
     existing = db.query(models.Player).filter(models.Player.name == player.name).first()
     if existing:
-        raise HTTPException(status_code=400, detail=f"Player '{player.name}' already exists")
-    db_player = models.Player(name=player.name, rating=player.rating)
+        return existing
+    db_player = models.Player(name=player.name, rating=player.rating, elo=player.rating)
     db.add(db_player)
     db.commit()
     db.refresh(db_player)
@@ -27,10 +29,15 @@ def create_tournament(db: Session, tournament: schemas.TournamentCreate):
     existing = db.query(models.Tournament).filter(models.Tournament.name == tournament.name).first()
     if existing:
         raise HTTPException(status_code=400, detail=f"A tournament named '{tournament.name}' already exists.")
-    # normalize type string to enum-like value (models expect enum names values at DB layer)
+    # normalize type string to enum value expected by the model
+    try:
+        tournament_type = models.TournamentType(tournament.type)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid tournament type") from exc
+
     t = models.Tournament(
         name=tournament.name,
-        type=tournament.type,
+        type=tournament_type,
         date=tournament.date,
         best_of=tournament.best_of,
         race_to=tournament.race_to,
@@ -60,6 +67,11 @@ def register_player(db: Session, tournament_id: int, player_id: int, player_name
 
     existing = db.query(models.TournamentRegistration).filter_by(tournament_id=tournament_id, player_id=player.id).first()
     if existing:
+        if not existing.paid:
+            existing.paid = True
+            db.commit()
+            db.refresh(existing)
+            return existing
         raise HTTPException(status_code=400, detail=f'Player {player.name} is already registered for this tournament.')
     reg = models.TournamentRegistration(tournament_id=tournament_id, player_id=player.id)
     db.add(reg)
@@ -71,7 +83,7 @@ def complete_tournament(db: Session, tournament_id: int, winners: List[schemas.W
     tournament = db.query(models.Tournament).filter(models.Tournament.id == tournament_id).first()
     if not tournament:
         raise HTTPException(status_code=404, detail='Tournament not found')
-    if tournament.status.value == 'COMPLETED':
+    if tournament.status == models.TournamentStatus.COMPLETED:
         raise HTTPException(status_code=400, detail='Tournament already completed')
     # validations
     positions = [w.position for w in winners]
@@ -117,8 +129,10 @@ def report_result(db: Session, match_id: int, result: schemas.MatchResult):
         raise HTTPException(status_code=404, detail="Match not found")
 
     # Update match result
-    db_match.score_player1 = result.score_player1
-    db_match.score_player2 = result.score_player2
+    if result.score_player1 is not None:
+        db_match.score_player1 = result.score_player1
+    if result.score_player2 is not None:
+        db_match.score_player2 = result.score_player2
     db_match.winner_id = result.winner_id
     db_match.completed_at = datetime.utcnow()
 
@@ -130,7 +144,7 @@ def report_result(db: Session, match_id: int, result: schemas.MatchResult):
     if tournament:
         matches = db.query(models.Match).filter(models.Match.tournament_id == tournament.id).all()
         if all(m.winner_id is not None for m in matches):  # all matches finished
-            tournament.status = "COMPLETED"
+            tournament.status = models.TournamentStatus.COMPLETED
             db.commit()
             db.refresh(tournament)
 
