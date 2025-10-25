@@ -84,8 +84,8 @@ class MatchCreate(BaseModel):
 
 class MatchResult(BaseModel):
     """Used to report the result of a match."""
-    score_player1: int
-    score_player2: int
+    score_player1: Optional[int] = None
+    score_player2: Optional[int] = None
     winner_id: int
 
 
