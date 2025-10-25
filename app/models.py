@@ -1,197 +1,180 @@
-
+"""Database models for the snooker tournaments application."""
+from __future__ import annotations
 
 import enum
 from datetime import datetime
-from sqlalchemy import Float, Column, Integer, String, DateTime, Enum, ForeignKey, Boolean
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
-from .database import Base
-from sqlalchemy import Float, Enum as PgEnum
-from sqlalchemy import Float, Column, Integer, String, ForeignKey, DateTime, Enum, Float
-from sqlalchemy import MetaData
+
 from .database import Base
 
-# app/models.py
-from sqlalchemy import Column, Integer, String, DateTime, Enum as SAEnum, ForeignKey, Boolean, Float
-from sqlalchemy.orm import relationship
-from datetime import datetime
-from .database import Base
-import enum
 
-class TournamentType(enum.Enum):
+class TournamentType(str, enum.Enum):
+    """Supported tournament formats."""
+
     league = "league"
     knockout = "knockout"
     double_elimination = "double_elimination"
 
-class TournamentStatus(enum.Enum):
+
+class TournamentStatus(str, enum.Enum):
+    """Lifecycle state for a tournament."""
+
     PENDING = "PENDING"
     ONGOING = "ONGOING"
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
 
+
+class TransactionType(str, enum.Enum):
+    """Allowed wallet transaction types."""
+
+    deposit = "deposit"
+    withdrawal = "withdrawal"
+    prize = "prize"
+    fee = "fee"
+
+
 class Player(Base):
+    """Registered snooker player."""
+
     __tablename__ = "players"
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False, index=True)
-    rating = Column(Integer, default=1500)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    rating = Column(Integer, default=1500, nullable=False)
+    elo = Column(Integer, default=1500, nullable=False)
+    balance = Column(Float, default=0.0, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    registrations = relationship('TournamentRegistration', back_populates='player')
-    results = relationship('TournamentResult', back_populates='player')
-    transactions = relationship("WalletTransaction", back_populates="player", cascade="all, delete-orphan")
+    registrations = relationship(
+        "TournamentRegistration",
+        back_populates="player",
+        cascade="all, delete-orphan",
+    )
+    results = relationship(
+        "TournamentResult",
+        back_populates="player",
+        cascade="all, delete-orphan",
+    )
+    transactions = relationship(
+        "WalletTransaction",
+        back_populates="player",
+        cascade="all, delete-orphan",
+    )
+
 
 class Tournament(Base):
+    """Snooker tournament."""
+
     __tablename__ = "tournaments"
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False, index=True)
-    date = Column(DateTime, default=datetime.utcnow)
-    type = Column(Enum(TournamentType), default=TournamentType.knockout)
-    status = Column(Enum(TournamentStatus), default=TournamentStatus.PENDING)
-    best_of = Column(Integer, default=3)
+    date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    type = Column(Enum(TournamentType), default=TournamentType.knockout, nullable=False)
+    status = Column(Enum(TournamentStatus), default=TournamentStatus.PENDING, nullable=False)
+    best_of = Column(Integer, default=3, nullable=False)
     race_to = Column(Integer, nullable=True)
-    entry_fee = Column(Integer, default=0)
+    entry_fee = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    registrations = relationship('TournamentRegistration', back_populates='tournament')
-    results = relationship('TournamentResult', back_populates='tournament')
-    matches = relationship('Match', back_populates='tournament')
+    registrations = relationship(
+        "TournamentRegistration",
+        back_populates="tournament",
+        cascade="all, delete-orphan",
+    )
+    results = relationship(
+        "TournamentResult",
+        back_populates="tournament",
+        cascade="all, delete-orphan",
+    )
+    matches = relationship(
+        "Match",
+        back_populates="tournament",
+        cascade="all, delete-orphan",
+    )
+
 
 class Match(Base):
+    """Individual match inside a tournament."""
+
     __tablename__ = "matches"
+
     id = Column(Integer, primary_key=True, index=True)
-    tournament_id = Column(Integer, ForeignKey('tournaments.id'))
-    player1_id = Column(Integer, ForeignKey('players.id'), nullable=True)
-    player2_id = Column(Integer, ForeignKey('players.id'), nullable=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id"), nullable=False)
+    player1_id = Column(Integer, ForeignKey("players.id"), nullable=True)
+    player2_id = Column(Integer, ForeignKey("players.id"), nullable=True)
     score_player1 = Column(Integer, nullable=True)
     score_player2 = Column(Integer, nullable=True)
-    winner_id = Column(Integer, ForeignKey('players.id'), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    winner_id = Column(Integer, ForeignKey("players.id"), nullable=True)
+    scheduled_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)
 
-    tournament = relationship('Tournament', back_populates='matches')
-    player1 = relationship('Player', foreign_keys=[player1_id])
-    player2 = relationship('Player', foreign_keys=[player2_id])
-    winner = relationship('Player', foreign_keys=[winner_id])
-
-    scheduled_at = Column(DateTime, default=datetime.utcnow)
-
+    tournament = relationship("Tournament", back_populates="matches")
+    player1 = relationship("Player", foreign_keys=[player1_id])
+    player2 = relationship("Player", foreign_keys=[player2_id])
+    winner = relationship("Player", foreign_keys=[winner_id])
 
 
 class TournamentRegistration(Base):
-    __tablename__ = "tournament_registrations"
-    id = Column(Integer, primary_key=True, index=True)
-    tournament_id = Column(Integer, ForeignKey('tournaments.id'))
-    player_id = Column(Integer, ForeignKey('players.id'))
-    paid = Column(Boolean, default=False)
-    waived = Column(Boolean, default=False)
-    contribution = Column(Integer, default=0)
+    """Link a player to a tournament entry."""
 
-    tournament = relationship('Tournament', back_populates='registrations')
-    player = relationship('Player', back_populates='registrations')
+    __tablename__ = "tournament_registrations"
+    __table_args__ = (
+        UniqueConstraint("tournament_id", "player_id", name="uq_registration"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id"), nullable=False)
+    player_id = Column(Integer, ForeignKey("players.id"), nullable=False)
+    paid = Column(Boolean, default=False, nullable=False)
+    waived = Column(Boolean, default=False, nullable=False)
+    contribution = Column(Integer, default=0, nullable=False)
+
+    tournament = relationship("Tournament", back_populates="registrations")
+    player = relationship("Player", back_populates="registrations")
+
 
 class TournamentResult(Base):
+    """Leaderboard result for a tournament."""
+
     __tablename__ = "tournament_results"
+    __table_args__ = (
+        UniqueConstraint("tournament_id", "position", name="uq_tournament_position"),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
-    tournament_id = Column(Integer, ForeignKey('tournaments.id'))
-    player_id = Column(Integer, ForeignKey('players.id'))
+    tournament_id = Column(Integer, ForeignKey("tournaments.id"), nullable=False)
+    player_id = Column(Integer, ForeignKey("players.id"), nullable=False)
     position = Column(Integer, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    tournament = relationship('Tournament', back_populates='results')
-    player = relationship('Player', back_populates='results')
-
-
-
-class TransactionType(str, enum.Enum):
-    deposit = "deposit"
-    withdrawal = "withdrawal"
-
-class WalletTransaction(Base):
-    __tablename__ = "wallet_transactions"
-
-    id = Column(Integer, primary_key=True, index=True)
-    player_id = Column(Integer, ForeignKey("players.id"))
-    type = Column(PgEnum(TransactionType), nullable=False)
-    amount = Column(Float, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-
-    player = relationship("Player", back_populates="transactions")
-import enum
-from datetime import datetime
-
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    DateTime,
-    Enum,
-    ForeignKey,
-    Boolean,
-    Float,
-)
-from sqlalchemy import Enum as PgEnum
-from sqlalchemy.orm import relationship
-
-from .database import Base
-
-
-class PlayerStatus(str, enum.Enum):
-    active = "active"
-    banned = "banned"
-
-
-class WalletStatus(str, enum.Enum):
-    active = "active"
-    suspended = "suspended"
-
-
-class TransactionType(enum.Enum):
-    DEPOSIT = "deposit"
-    WITHDRAW = "withdraw"
-    PRIZE = "prize"
-    FEE = "fee"
-
-
-class Player(Base):
-    __tablename__ = "players"
-    
-    # ... your other columns ...
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    email = Column(String, unique=True, index=True, nullable=False)
-    phone_number = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    status = Column(PgEnum(PlayerStatus), default=PlayerStatus.active, nullable=False)
-
-    wallet = relationship("Wallet", back_populates="player", uselist=False)
-    transactions = relationship("WalletTransaction", back_populates="player")
-
-
-class Wallet(Base):
-    __tablename__ = "wallets"
-
-    id = Column(Integer, primary_key=True, index=True)
-    player_id = Column(Integer, ForeignKey("players.id"))
-    balance = Column(Float, default=0.0)
-    status = Column(PgEnum(WalletStatus), default=WalletStatus.active, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    player = relationship("Player", back_populates="wallet")
+    tournament = relationship("Tournament", back_populates="results")
+    player = relationship("Player", back_populates="results")
 
 
 class WalletTransaction(Base):
+    """Financial transaction linked to a player's wallet."""
+
     __tablename__ = "wallet_transactions"
+
     id = Column(Integer, primary_key=True, index=True)
     player_id = Column(Integer, ForeignKey("players.id"), nullable=False)
-    type = Column(SAEnum(TransactionType), nullable=False)
-    amount = Column(Float, nullable=False)  # <-- correct SQLAlchemy type
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    type = Column(Enum(TransactionType), nullable=False)
+    amount = Column(Float, nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+
     player = relationship("Player", back_populates="transactions")
-
-Base.metadata.clear()
-
-
-
-
-
