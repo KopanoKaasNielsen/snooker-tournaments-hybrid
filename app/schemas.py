@@ -103,6 +103,9 @@ class TournamentRegistrationCreate(BaseModel):
     player_id: int
 
 
+class WalletAmount(BaseModel):
+    amount: float = Field(..., gt=0)
+
 class PlayerBalanceOut(BaseModel):
     player_id: int
     balance: float
@@ -110,6 +113,15 @@ class PlayerBalanceOut(BaseModel):
 class PlayerEloOut(BaseModel):
     player_id: int
     elo: int
+
+class PlayerOut(BaseModel):
+    id: int
+    name: str
+    elo: int
+    balance: float
+
+    class Config:
+        from_attributes = True
 
 class WalletTransactionOut(BaseModel):
     id: int

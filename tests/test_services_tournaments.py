@@ -1,7 +1,8 @@
+from datetime import datetime
 import pytest
 from sqlalchemy.orm import Session
 from app.models import Tournament, Player, TournamentRegistration
-from app.database import SessionLocal
+from tests.conftest import TestingSessionLocal
 from app.services.tournaments import distribute_prizes, generate_knockout_matches
 
 
@@ -9,7 +10,7 @@ def create_dummy_tournament(db: Session, player_count=4) -> Tournament:
     tournament = Tournament(
         name="Knockout Test",
         type="knockout",
-        date="2025-10-01T12:00:00",
+        date=datetime.fromisoformat("2025-10-01T12:00:00"),
         best_of=5,
         race_to=3,
         entry_fee=100,
@@ -30,7 +31,7 @@ def create_dummy_tournament(db: Session, player_count=4) -> Tournament:
 
 
 def test_generate_knockout_matches_even():
-    db = SessionLocal()
+    db = TestingSessionLocal()
     tournament = create_dummy_tournament(db, player_count=4)
     matches = generate_knockout_matches(db, tournament)
     assert len(matches) == 2  # 4 players → 2 matches
@@ -38,7 +39,7 @@ def test_generate_knockout_matches_even():
 
 
 def test_generate_knockout_matches_odd():
-    db = SessionLocal()
+    db = TestingSessionLocal()
     tournament = create_dummy_tournament(db, player_count=5)
     matches = generate_knockout_matches(db, tournament)
     assert len(matches) == 3  # 2 matches + 1 bye
@@ -48,7 +49,7 @@ def test_generate_knockout_matches_odd():
 
 
 def test_distribute_prizes():
-    db = SessionLocal()
+    db = TestingSessionLocal()
     tournament = create_dummy_tournament(db, player_count=3)
     db.refresh(tournament)
 

@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 # app/database.py
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from sqlalchemy import create_engine, MetaData
 
 # (optional) naming convention helps with migrations & alembic
@@ -25,6 +25,9 @@ Base = declarative_base(metadata=metadata)
 SQLALCHEMY_DATABASE_URL = "sqlite:///./snooker.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+# Ensure default SQLite database has tables available for ad-hoc usage
+Base.metadata.create_all(bind=engine)
 
 
 

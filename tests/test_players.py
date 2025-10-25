@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 from app.main import app
-from app.database import SessionLocal
+from tests.conftest import TestingSessionLocal
 from app.models import Player
 
 client = TestClient(app)
@@ -42,7 +42,9 @@ def test_balance_and_elo_endpoints():
     assert r.json()["elo"] == 1500
 
 def test_leaderboard_endpoint():
-    db = SessionLocal()
+    db = TestingSessionLocal()
+    db.query(Player).delete()
+    db.commit()
     # Create players with Elo directly set
     players = []
     for name, elo in [("Alice", 1800), ("Bob", 1500), ("Carl", 1700)]:
