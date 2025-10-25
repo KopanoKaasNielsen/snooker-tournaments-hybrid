@@ -1,13 +1,14 @@
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from app.main import app
-from app.database import SessionLocal
-from app.models import Player, Tournament, TournamentRegistration
+from tests.conftest import TestingSessionLocal
+from app.models import Tournament
 
 
 @pytest.mark.asyncio
 async def test_api_flow():
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         # 1. Create players + deposit balance
         player_ids = []
         for name in ["Ronnie", "Selby"]:
@@ -36,16 +37,20 @@ async def test_api_flow():
             assert r.status_code == 200
 
         # 4. Generate matches (direct DB for now)
-        db = SessionLocal()
+        db = TestingSessionLocal()
         tournament = db.query(Tournament).get(tid)
         from app.services.tournaments import generate_knockout_matches
         matches = generate_knockout_matches(db, tournament)
-        db.close()
-
         assert len(matches) >= 1
         match = matches[0]
+        match_id = match.id
+        winner_id = match.player1_id
+        db.expunge_all()
+        db.close()
 
         # 5. Submit match result
-        winner_id = match.player1_id
-        r = await client.post(f"/matches/{match.id}/result", json={"winner_id": winner_id})
+        r = await client.post(
+            f"/matches/{match_id}/result",
+            json={"winner_id": winner_id, "score_player1": 3, "score_player2": 0},
+        )
         assert r.status_code == 200

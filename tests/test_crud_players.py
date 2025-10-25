@@ -1,11 +1,11 @@
 from app.crud import create_player, get_player
 from app.schemas import PlayerCreate
-from app.database import SessionLocal
+from tests.conftest import TestingSessionLocal
 from app.models import Player
 
 
 def test_create_and_get_player():
-    db = SessionLocal()
+    db = TestingSessionLocal()
     new_player = PlayerCreate(name="Test Player CRUD")
     created = create_player(db, new_player)
     assert isinstance(created, Player)

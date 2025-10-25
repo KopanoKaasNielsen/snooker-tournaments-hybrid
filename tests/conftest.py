@@ -1,27 +1,27 @@
-# tests/conftest.py
-import os, pathlib, pytest
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.database import Base
+from app import models  # ensure models are registered
+from app.database import Base, get_db
 from app.main import app
-from app.dependencies import get_db
 
-TEST_DB_PATH = pathlib.Path("./test.db")
-TEST_DB_URL = f"sqlite:///{TEST_DB_PATH}"
+TEST_SQLITE_URL = "sqlite:///./test.db"
+engine = create_engine(TEST_SQLITE_URL, connect_args={"check_same_thread": False})
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
-@pytest.fixture(scope="session", autouse=True)
-def create_test_database():
-    if TEST_DB_PATH.exists():
-        os.remove(TEST_DB_PATH)
-    Base.metadata.create_all(bind=engine)
-    yield
+@pytest.fixture(autouse=True, scope="function")
+def fresh_database():
+    engine.dispose()
     Base.metadata.drop_all(bind=engine)
-    if TEST_DB_PATH.exists():
-        os.remove(TEST_DB_PATH)
+    Base.metadata.create_all(bind=engine)
+    try:
+        yield
+    finally:
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+
 
 @pytest.fixture(autouse=True)
 def override_get_db(monkeypatch):
@@ -31,4 +31,5 @@ def override_get_db(monkeypatch):
             yield db
         finally:
             db.close()
+
     app.dependency_overrides[get_db] = _override

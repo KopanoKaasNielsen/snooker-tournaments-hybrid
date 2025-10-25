@@ -1,22 +1,29 @@
-import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 import uuid
 
 
 client = TestClient(app)
-client = TestClient(app)
+
 
 def unique_name(base: str) -> str:
     return f"{base}_{uuid.uuid4().hex[:6]}"
 
 
+def create_players_with_balance(count: int, deposit_amount: float = 100.0) -> list[int]:
+    player_ids: list[int] = []
+    for i in range(1, count + 1):
+        response = client.post("/players/", json={"name": unique_name(f"Player {i}")})
+        assert response.status_code == 200, f"Player creation failed: {response.text}"
+        pid = response.json()["id"]
+        deposit = client.post(f"/players/{pid}/deposit", json={"amount": deposit_amount})
+        assert deposit.status_code == 200, f"Deposit failed for player {pid}: {deposit.text}"
+        player_ids.append(pid)
+    return player_ids
+
 
 def test_full_tournament_flow():
-    # Create players
-    for i in range(1, 5):
-        r = client.post("/players/", json={"name": f"Player {i}"})
-        assert r.status_code == 200, f"Player creation failed: {r.text}"
+    player_ids = create_players_with_balance(4)
 
     tournament_data = {
         "name": unique_name("Test Open Flow"),
@@ -32,7 +39,7 @@ def test_full_tournament_flow():
     tournament_id = tournament["id"]
 
     # Register players
-    for pid in [1, 2, 3, 4]:
+    for pid in player_ids:
         r = client.post(
             f"/tournaments/{tournament_id}/register",
             json={"player_id": pid, "tournament_id": tournament_id},
@@ -42,19 +49,15 @@ def test_full_tournament_flow():
 
     # Complete tournament
     winners = [
-        {"player_id": 1, "position": 1},
-        {"player_id": 2, "position": 2},
-        {"player_id": 3, "position": 3},
-        {"player_id": 4, "position": 4},
+        {"player_id": pid, "position": index + 1}
+        for index, pid in enumerate(player_ids)
     ]
     r = client.post(f"/tournaments/{tournament_id}/complete", json=winners)
     assert r.status_code == 200, f"Failed to complete tournament: {r.text}"
 
 
 def test_register_same_player_twice():
-    # Create player
-    r = client.post("/players/", json={"name": "Player 1"})
-    assert r.status_code == 200
+    player_id = create_players_with_balance(1)[0]
 
     # Create tournament
     tournament_data = {
@@ -76,14 +79,14 @@ def test_register_same_player_twice():
 # Register player twice
     r1 = client.post(
         f"/tournaments/{tournament_id}/register",
-        json={"player_id": 1, "tournament_id": tournament_id},
+        json={"player_id": player_id, "tournament_id": tournament_id},
     )
-
-
-    r1 = client.post(f"/tournaments/{tournament_id}/register", json={"player_id": 1, "tournament_id": tournament_id})
     assert r1.status_code == 200, f"First register failed: {r1.text}"
 
-    r2 = client.post(f"/tournaments/{tournament_id}/register", json={"player_id": 1, "tournament_id": tournament_id})
+    r2 = client.post(
+        f"/tournaments/{tournament_id}/register",
+        json={"player_id": player_id, "tournament_id": tournament_id},
+    )
     assert r2.status_code == 400, f"Expected 400 duplicate error but got {r2.status_code}: {r2.text}"
 
 
@@ -100,22 +103,20 @@ def test_complete_tournament_with_invalid_player():
     assert response.status_code == 200, f"Unexpected response: {response.text}"
     tournament_id = response.json()["id"]
 
+    player_ids = create_players_with_balance(2)
+
     # Register valid players
-    for pid in [1, 2]:
-        client.post(f"/tournaments/{tournament_id}/register", json={"player_id": pid, "tournament_id": tournament_id})
+    for pid in player_ids:
+        reg_resp = client.post(
+            f"/tournaments/{tournament_id}/register",
+            json={"player_id": pid, "tournament_id": tournament_id},
+        )
+        assert reg_resp.status_code == 200, f"Failed to register player {pid}: {reg_resp.text}"
 
     winners = [
-        {"player_id": 1, "position": 1},
+        {"player_id": player_ids[0], "position": 1},
         {"player_id": 999, "position": 2},  # invalid player
     ]
     r = client.post(f"/tournaments/{tournament_id}/complete", json=winners)
     assert r.status_code == 400, f"Expected 400 but got {r.status_code}: {r.text}"
-
-    # Create players and deposit balance
-for i in range(1, 5):
-    r = client.post("/players/", json={"name": f"Player {i}"})
-    assert r.status_code == 200
-    pid = r.json()["id"]
-    # Deposit funds for entry
-    client.post(f"/players/{pid}/deposit", json={"amount": 100})
 

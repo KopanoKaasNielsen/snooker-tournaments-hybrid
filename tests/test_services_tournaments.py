@@ -1,4 +1,5 @@
 from datetime import datetime
+import uuid
 import pytest
 from sqlalchemy.orm import Session
 from app.models import Tournament, Player, TournamentRegistration
@@ -8,7 +9,7 @@ from app.services.tournaments import distribute_prizes, generate_knockout_matche
 
 def create_dummy_tournament(db: Session, player_count=4) -> Tournament:
     tournament = Tournament(
-        name="Knockout Test",
+        name=f"Knockout Test_{uuid.uuid4().hex[:6]}",
         type="knockout",
         date=datetime.fromisoformat("2025-10-01T12:00:00"),
         best_of=5,
