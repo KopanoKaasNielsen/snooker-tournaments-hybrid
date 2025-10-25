@@ -28,10 +28,14 @@ def create_tournament(db: Session, tournament: schemas.TournamentCreate):
     if existing:
         raise HTTPException(status_code=400, detail=f"A tournament named '{tournament.name}' already exists.")
     # normalize type string to enum-like value (models expect enum names values at DB layer)
+    tournament_date = tournament.date
+    if isinstance(tournament_date, str):
+        tournament_date = datetime.fromisoformat(tournament_date)
+
     t = models.Tournament(
         name=tournament.name,
         type=tournament.type,
-        date=tournament.date,
+        date=tournament_date,
         best_of=tournament.best_of,
         race_to=tournament.race_to,
         entry_fee=tournament.entry_fee,
@@ -43,6 +47,10 @@ def create_tournament(db: Session, tournament: schemas.TournamentCreate):
 
 def get_tournaments(db: Session):
     return db.query(models.Tournament).all()
+
+
+def get_tournament(db: Session, tournament_id: int):
+    return db.query(models.Tournament).filter(models.Tournament.id == tournament_id).first()
 
 def register_player(db: Session, tournament_id: int, player_id: int, player_name: str | None = None):
     tournament = db.query(models.Tournament).filter(models.Tournament.id == tournament_id).first()
@@ -139,5 +147,4 @@ def report_result(db: Session, match_id: int, result: schemas.MatchResult):
 def get_matches(db: Session):
     """Return all matches from the database."""
     return db.query(models.Match).all()
-
 
