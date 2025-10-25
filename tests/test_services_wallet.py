@@ -1,10 +1,10 @@
 from app.services import wallet
 from app.models import Player
-from app.database import SessionLocal
+from tests.conftest import TestingSessionLocal
 
 
 def test_wallet_flow():
-    db = SessionLocal()
+    db = TestingSessionLocal()
     player = Player(name="Wallet Test")
     db.add(player)
     db.commit()
