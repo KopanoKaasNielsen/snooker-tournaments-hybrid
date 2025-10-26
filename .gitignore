@@ -28,3 +28,39 @@ venv/
 *.db
 .pytest_cache/
 venv/
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+/junit.xml
+
+# production
+/build
+/dist
+
+# misc
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDEs and editors
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# system
+Thumbs.db
+*.log
+
+# Canvas and Codex
+/results
+.codex.yml
