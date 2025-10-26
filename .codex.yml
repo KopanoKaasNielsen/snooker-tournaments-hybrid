@@ -1,0 +1,4 @@
+project_name: snooker-tounamentsHybrid
+project_path: /home/kp/snooker-tounamentsHybrid
+results_path: /home/kp/snooker-tounamentsHybrid/results
+language: python

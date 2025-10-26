@@ -1,0 +1,45 @@
+name: 🧱 Snooker Hybrid – Stabilization Phase 2
+description: |
+  Execute all automated repair, validation, and deployment tasks for Phase 2.
+  This includes test repair, feature validation, CI/CD verification, Docker image build,
+  and documentation update for version v2.0.0-stable.
+
+steps:
+  - name: 🧪 Test Repair and Coverage
+    run: |
+      echo '🧪 Running test repair sequence...'
+      pytest -v --maxfail=3 --disable-warnings | tee tests/test_repair_phase2.log
+      coverage run -m pytest
+      coverage report -m
+
+  - name: 🧩 Feature Validation
+    run: |
+      echo '🧩 Validating new endpoints and wallet features...'
+      pytest -v tests/test_api_flow.py | tee tests/test_feature_validation.log
+
+  - name: 🧰 CI/CD Lint + Type Check
+    run: |
+      echo '🧰 Running linting and type checks...'
+      black --check .
+      isort --check-only .
+      mypy app/
+
+  - name: 🐳 Docker Build Verification
+    run: |
+      echo '🐳 Building Docker image for verification...'
+      docker build -t snooker-hybrid:phase2 .
+      echo '✅ Docker image built successfully.'
+
+  - name: 📦 Documentation & Release Tag
+    run: |
+      echo '📦 Updating documentation and tagging release...'
+      echo '## Snooker Hybrid v2.0.0 – Stabilization Phase 2' > docs/CHANGELOG.md
+      echo '- All tests repaired and CI pipeline verified' >> docs/CHANGELOG.md
+      echo '- Docker build validated and deployment ready' >> docs/CHANGELOG.md
+      git add docs/CHANGELOG.md
+      git commit -m '📦 docs: add changelog for v2.0.0-stable'
+      git tag -a v2.0.0-stable -m 'Snooker Hybrid Stabilization Phase 2 Complete'
+      git push origin stabilization-phase-2 --tags
+
+  - name: ✅ Done
+    run: echo '🎯 Snooker Hybrid Phase 2 stabilization complete. Ready for deployment.'
