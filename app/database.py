@@ -1,8 +1,9 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base, Session
-# app/database.py
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
-from sqlalchemy import create_engine, MetaData
+"""Database configuration for the snooker tournaments application."""
+
+from __future__ import annotations
+
+from sqlalchemy import MetaData, create_engine
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 # (optional) naming convention helps with migrations & alembic
 naming_convention = {
@@ -12,10 +13,6 @@ naming_convention = {
     "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
     "pk": "pk_%(table_name)s",
 }
-
-DATABASE_URL = "sqlite:///./snooker.db"
-
-
 
 metadata = MetaData(naming_convention=naming_convention)
 
@@ -28,6 +25,7 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 # Ensure default SQLite database has tables available for ad-hoc usage
 Base.metadata.create_all(bind=engine)
+
 
 
 

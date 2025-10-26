@@ -178,3 +178,14 @@ class WalletTransaction(Base):
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     player = relationship("Player", back_populates="transactions")
+
+
+# Seed the default SQLite database eagerly so ad-hoc imports have data
+# available. The import is wrapped in a ``try`` block to avoid crashing during
+# certain deployment scenarios where the seed helpers might be absent.
+try:  # pragma: no cover - defensive import guard
+    from app.init_db import seed_data
+except Exception:  # pragma: no cover - best-effort seeding
+    pass
+else:  # pragma: no cover - side-effect only
+    seed_data()
