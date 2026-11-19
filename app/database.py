@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from sqlalchemy import MetaData, create_engine
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
@@ -19,8 +21,15 @@ metadata = MetaData(naming_convention=naming_convention)
 Base = declarative_base(metadata=metadata)
 
 # typical app engine here; tests will override
-SQLALCHEMY_DATABASE_URL = "sqlite:///./snooker.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+SQLALCHEMY_DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./snooker.db")
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    connect_args=(
+        {"check_same_thread": False}
+        if SQLALCHEMY_DATABASE_URL.startswith("sqlite")
+        else {}
+    ),
+)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 # Ensure default SQLite database has tables available for ad-hoc usage

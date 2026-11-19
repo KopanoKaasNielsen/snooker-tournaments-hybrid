@@ -1,7 +1,16 @@
 import useAuth from '@/hooks/useAuth';
 
 export default function Profile() {
-  const { user, isLoading, refreshProfile } = useAuth();
+  const { user, isLoading, refreshProfile, profileAvailable } = useAuth();
+
+  if (profileAvailable === false) {
+    return (
+      <section className="page" aria-labelledby="profile-heading">
+        <h2 id="profile-heading">Profile</h2>
+        <p>Profile unavailable: the backend has no authenticated profile endpoint.</p>
+      </section>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -16,7 +25,7 @@ export default function Profile() {
     return (
       <section className="page" aria-labelledby="profile-heading">
         <h2 id="profile-heading">Profile</h2>
-        <p>No profile information available. Please sign in.</p>
+        <p>No profile information available.</p>
         <button type="button" onClick={() => refreshProfile()}>
           Retry
         </button>

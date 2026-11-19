@@ -1,39 +1,41 @@
-const transactions = [
-  { id: 'tx-1', description: 'Player payout - Semi Final', amount: -1500 },
-  { id: 'tx-2', description: 'Ticket revenue - Session A', amount: 4200 },
-  { id: 'tx-3', description: 'Sponsorship bonus', amount: 2500 }
-];
-
-const currency = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' });
-
+import { useEffect, useState } from 'react';
+import api, { apiErrorMessage } from '@api/client';
+interface Player { id: number; name: string; }
+interface Balance { player_id: number; balance: number; }
+interface Transaction { id: number; type: string; amount: number; timestamp: string; }
 export default function Wallet() {
-  const balance = transactions.reduce((acc, tx) => acc + tx.amount, 0);
-
-  return (
-    <section className="page" aria-labelledby="wallet-heading">
-      <h2 id="wallet-heading">Tournament wallet</h2>
-      <p>Track payouts, sponsorship deals, and real-time ticket revenue.</p>
-      <div style={{ marginBottom: '1.5rem' }}>
-        <strong>Current balance:</strong> {currency.format(balance)}
-      </div>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr>
-            <th align="left">Description</th>
-            <th align="right">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {transactions.map((tx) => (
-            <tr key={tx.id}>
-              <td style={{ padding: '0.5rem 0' }}>{tx.description}</td>
-              <td style={{ padding: '0.5rem 0' }} align="right">
-                {currency.format(tx.amount)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
+  const [players, setPlayers] = useState<Player[]>();
+  const [selected, setSelected] = useState('');
+  const [balance, setBalance] = useState<Balance>();
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [error, setError] = useState('');
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    setError(''); setPlayers(undefined); setBalance(undefined);
+    const load = async () => {
+      const response = await api.get<Player[]>('/players/', { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      setPlayers(response.data);
+      if (selected) {
+        const [b, t] = await Promise.all([
+          api.get<Balance>(`/players/${selected}/balance`, { signal: controller.signal }),
+          api.get<Transaction[]>(`/players/${selected}/transactions`, { signal: controller.signal })
+        ]);
+        if (!controller.signal.aborted) { setBalance(b.data); setTransactions(t.data); }
+      }
+    };
+    void load().catch(error => { if (!controller.signal.aborted) setError(apiErrorMessage(error)); });
+    return () => controller.abort();
+  }, [selected, attempt]);
+  return <section className="page"><h2>Player wallet</h2>
+    <p>Read-only public player records. Currency is not specified by the backend.</p>
+    {error ? <><p role="alert">{error}</p><button onClick={() => setAttempt(attempt + 1)}>Retry</button></> :
+      !players ? <p role="status">Loading players…</p> : players.length === 0 ? <p>No players available.</p> :
+      <><label>Player <select value={selected} onChange={event => setSelected(event.target.value)}><option value="">Select a player</option>{players.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>
+        {!selected ? <p>Select a player to view their wallet.</p> : !balance ? <p role="status">Loading wallet…</p> :
+          <><p>Current balance: {balance.balance.toFixed(2)}</p>{transactions.length === 0 ? <p>No transactions available.</p> :
+            <ul>{transactions.map(tx => <li key={tx.id}>{tx.type}: {tx.amount} · {tx.timestamp}</li>)}</ul>}</>}
+      </>}
+  </section>;
 }

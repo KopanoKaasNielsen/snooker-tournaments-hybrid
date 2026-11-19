@@ -23,7 +23,6 @@ venv/
 *.pyo
 .mypy_cache/
 .DS_Store
-=======
 .coverage
 *.db
 .pytest_cache/
@@ -62,5 +61,12 @@ Thumbs.db
 *.log
 
 # Canvas and Codex
-/results
+/results/*
+!/results/frontend_stabilization_report.md
 .codex.yml
+
+.venv/
+.env
+.env.*
+!.env.example
+*.tmp

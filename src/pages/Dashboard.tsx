@@ -1,25 +1,21 @@
-const mockFixtures = [
-  { id: 'fixture-1', title: 'Quarter Final - Table 1', status: 'In Progress', table: 1 },
-  { id: 'fixture-2', title: 'Quarter Final - Table 2', status: 'Scheduled', table: 2 },
-  { id: 'fixture-3', title: 'Quarter Final - Table 3', status: 'Completed', table: 3 }
-];
-
+import { useEffect, useState } from 'react';
+import api, { apiErrorMessage } from '@api/client';
+interface Tournament { id: number; name: string; date: string | null; status: string; }
 export default function Dashboard() {
-  return (
-    <section className="page" aria-labelledby="dashboard-heading">
-      <h2 id="dashboard-heading">Operations dashboard</h2>
-      <p>Monitor fixtures, player availability, and venue readiness in a single view.</p>
-
-      <div role="list" aria-label="Upcoming fixtures" style={{ display: 'grid', gap: '1rem' }}>
-        {mockFixtures.map((fixture) => (
-          <article key={fixture.id} role="listitem" className="card">
-            <h3>{fixture.title}</h3>
-            <p>
-              Table {fixture.table} · <strong>{fixture.status}</strong>
-            </p>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
+  const [items, setItems] = useState<Tournament[]>();
+  const [error, setError] = useState('');
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    setItems(undefined); setError('');
+    api.get<Tournament[]>('/tournaments/', { signal: controller.signal })
+      .then(response => { if (!controller.signal.aborted) setItems(response.data); })
+      .catch(error => { if (!controller.signal.aborted) setError(apiErrorMessage(error)); });
+    return () => controller.abort();
+  }, [attempt]);
+  return <section className="page"><h2>Operations dashboard</h2>
+    {error ? <><p role="alert">{error}</p><button onClick={() => setAttempt(attempt + 1)}>Retry</button></> :
+      !items ? <p role="status">Loading tournaments…</p> : items.length === 0 ? <p>No tournaments available.</p> :
+      <div>{items.map(item => <article className="card" key={item.id}><h3>{item.name}</h3><p>{item.status}</p><p>{item.date ?? 'Date not set'}</p></article>)}</div>}
+  </section>;
 }

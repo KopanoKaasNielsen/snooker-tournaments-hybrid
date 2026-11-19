@@ -5,6 +5,7 @@ const config: Config = {
   testEnvironment: 'jsdom',
   roots: ['<rootDir>/src', '<rootDir>/__tests__'],
   moduleNameMapper: {
+    '\\.(css)$': '<rootDir>/__tests__/styleMock.cjs',
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@pages/(.*)$': '<rootDir>/src/pages/$1',
     '^@components/(.*)$': '<rootDir>/src/components/$1',

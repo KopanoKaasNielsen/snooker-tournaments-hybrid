@@ -17,7 +17,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
-from .database import Base
+from .database import Base, engine
 
 
 class TournamentType(str, enum.Enum):
@@ -188,4 +188,5 @@ try:  # pragma: no cover - defensive import guard
 except Exception:  # pragma: no cover - best-effort seeding
     pass
 else:  # pragma: no cover - side-effect only
+    Base.metadata.create_all(bind=engine)
     seed_data()

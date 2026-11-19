@@ -71,10 +71,19 @@ body {
 
 @media (max-width: 768px) {
   .app-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sidebar {
-    display: none;
+    padding: 1rem;
+  }
+
+  .sidebar ul {
+    flex-direction: row;
+    flex-wrap: wrap;
   }
 }
+
+a { color: #38bdf8; }
+.content { min-width: 0; }
+input, select, button { font: inherit; padding: 0.5rem; }
