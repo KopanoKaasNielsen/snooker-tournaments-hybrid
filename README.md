@@ -8,10 +8,13 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-cp .env.example .env
-alembic upgrade head
+# Use a NEW disposable development database, not the existing snooker.db.
+export DATABASE_URL=sqlite:////tmp/snooker-local-dev.db
+export APP_ENV=development
+python -m app.db_cli init
+python -m app.db_cli seed-demo --confirm-demo  # optional demo data
 
-uvicorn app.main:app --reload
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 Open http://127.0.0.1:8000/docs
 
@@ -31,14 +34,24 @@ Start the backend separately, from the repository root with the Python virtual e
 uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-The backend defaults to the existing `snooker.db`. It creates tables and idempotently seeds
-records on import. Back up your database before ordinary backend development; never replace
-it with a test database. `DATABASE_URL=sqlite:////tmp/snooker-dev.db` selects a separate
-SQLite file for safe experimentation. This variable is read directly by `app/database.py`;
-the unused `app/core/config.py` settings object is not the runtime database configuration.
-Alembic is retained from the original setup; its `migrations/env.py` currently imports a
-nonexistent `DATABASE_URL` Python symbol. Repair migration configuration in a separate task
-before using the original Quickstart migration command against existing data. The frontend task does not require migrations.
+The backend defaults to the existing `snooker.db` when `DATABASE_URL` is unset. Imports and
+startup no longer create tables or seed records. Schema management is explicitly migration-driven.
+Do not run fresh migrations against the existing unversioned database. Record its checksum and
+back it up via SQLite's read-only-source backup API before any separately approved adoption.
+
+See [database architecture](docs/database-architecture.md) for integrity/financial risks and
+[the migration guide](docs/database-migration-guide.md) for backup instructions, fresh setup,
+explicit repeatable seeding and existing-copy verification. The shared engine and Alembic read
+exported `DATABASE_URL`; neither implicitly loads `.env`. Demo commands require development
+mode and reject the repository's existing database.
+
+```bash
+python -m scripts.verify_migrations
+python -m scripts.verify_migrations --existing-copy-from snooker.db
+```
+
+Both commands perform mutations only in temporary databases; the second opens the source
+read-only and verifies a disposable backup. The original is not stamped or migrated.
 
 ### API configuration
 
@@ -64,7 +77,7 @@ python -m pytest -q
 
 `lint` currently performs TypeScript checking only, not ESLint. Jest tests mock network
 requests and do not prove live backend availability. Backend tests create temporary SQLite
-databases automatically, including the import-time seed database, and never use `snooker.db`.
+databases automatically and never use `snooker.db`; demo data is seeded explicitly only in tests that require it.
 Existing test wallet mutations run only against those temporary databases. The build produces
 `dist/index.html` and bundled assets; preview normally listens on port 4173.
 
@@ -86,3 +99,6 @@ contract exists. No protected routes are implied. Existing backend financial mut
 are unauthenticated: review access control before exposing the backend publicly.
 See [the API contract](docs/frontend-api-contract.md) and
 [stabilization report](results/frontend_stabilization_report.md).
+
+Database stabilization findings and actual verification results are recorded in
+[the Task 02 report](results/database_stabilization_report.md).

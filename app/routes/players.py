@@ -30,7 +30,9 @@ def get_player(player_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{player_id}/deposit", response_model=schemas.PlayerBalanceOut)
-def deposit(player_id: int, payload: schemas.WalletAmount, db: Session = Depends(get_db)):
+def deposit(
+    player_id: int, payload: schemas.WalletAmount, db: Session = Depends(get_db)
+):
     try:
         player = wallet.deposit(db, player_id, payload.amount)
     except ValueError as exc:
@@ -39,7 +41,9 @@ def deposit(player_id: int, payload: schemas.WalletAmount, db: Session = Depends
 
 
 @router.post("/{player_id}/withdraw", response_model=schemas.PlayerBalanceOut)
-def withdraw(player_id: int, payload: schemas.WalletAmount, db: Session = Depends(get_db)):
+def withdraw(
+    player_id: int, payload: schemas.WalletAmount, db: Session = Depends(get_db)
+):
     try:
         player = wallet.withdraw(db, player_id, payload.amount)
     except ValueError as exc:
@@ -49,7 +53,7 @@ def withdraw(player_id: int, payload: schemas.WalletAmount, db: Session = Depend
 
 @router.get("/{player_id}/balance", response_model=schemas.PlayerBalanceOut)
 def get_player_balance(player_id: int, db: Session = Depends(get_db)):
-    player = db.query(models.Player).get(player_id)
+    player = db.get(models.Player, player_id)
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     return {"player_id": player.id, "balance": player.balance}
@@ -57,7 +61,7 @@ def get_player_balance(player_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{player_id}/elo", response_model=schemas.PlayerEloOut)
 def get_player_elo(player_id: int, db: Session = Depends(get_db)):
-    player = db.query(models.Player).get(player_id)
+    player = db.get(models.Player, player_id)
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     return {"player_id": player.id, "elo": player.elo}
@@ -65,7 +69,7 @@ def get_player_elo(player_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{player_id}/transactions")
 def get_wallet_transactions(player_id: int, db: Session = Depends(get_db)):
-    player = db.query(models.Player).get(player_id)
+    player = db.get(models.Player, player_id)
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
 

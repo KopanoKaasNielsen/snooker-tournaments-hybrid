@@ -1,8 +1,9 @@
 """Database models for the snooker tournaments application."""
+
 from __future__ import annotations
 
 import enum
-from datetime import datetime
+from app.time import utc_now
 
 from sqlalchemy import (
     Boolean,
@@ -17,7 +18,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
-from .database import Base, engine
+from .database import Base
 
 
 class TournamentType(str, enum.Enum):
@@ -56,7 +57,7 @@ class Player(Base):
     rating = Column(Integer, default=1500, nullable=False)
     elo = Column(Integer, default=1500, nullable=False)
     balance = Column(Float, default=0.0, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
 
     registrations = relationship(
         "TournamentRegistration",
@@ -82,13 +83,15 @@ class Tournament(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False, index=True)
-    date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    date = Column(DateTime, default=utc_now, nullable=False)
     type = Column(Enum(TournamentType), default=TournamentType.knockout, nullable=False)
-    status = Column(Enum(TournamentStatus), default=TournamentStatus.PENDING, nullable=False)
+    status = Column(
+        Enum(TournamentStatus), default=TournamentStatus.PENDING, nullable=False
+    )
     best_of = Column(Integer, default=3, nullable=False)
     race_to = Column(Integer, nullable=True)
     entry_fee = Column(Integer, default=0, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
 
     registrations = relationship(
         "TournamentRegistration",
@@ -119,8 +122,8 @@ class Match(Base):
     score_player1 = Column(Integer, nullable=True)
     score_player2 = Column(Integer, nullable=True)
     winner_id = Column(Integer, ForeignKey("players.id"), nullable=True)
-    scheduled_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    scheduled_at = Column(DateTime, default=utc_now, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
     completed_at = Column(DateTime, nullable=True)
 
     tournament = relationship("Tournament", back_populates="matches")
@@ -160,7 +163,7 @@ class TournamentResult(Base):
     tournament_id = Column(Integer, ForeignKey("tournaments.id"), nullable=False)
     player_id = Column(Integer, ForeignKey("players.id"), nullable=False)
     position = Column(Integer, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
 
     tournament = relationship("Tournament", back_populates="results")
     player = relationship("Player", back_populates="results")
@@ -175,18 +178,6 @@ class WalletTransaction(Base):
     player_id = Column(Integer, ForeignKey("players.id"), nullable=False)
     type = Column(Enum(TransactionType), nullable=False)
     amount = Column(Float, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    timestamp = Column(DateTime, default=utc_now, nullable=False)
 
     player = relationship("Player", back_populates="transactions")
-
-
-# Seed the default SQLite database eagerly so ad-hoc imports have data
-# available. The import is wrapped in a ``try`` block to avoid crashing during
-# certain deployment scenarios where the seed helpers might be absent.
-try:  # pragma: no cover - defensive import guard
-    from app.init_db import seed_data
-except Exception:  # pragma: no cover - best-effort seeding
-    pass
-else:  # pragma: no cover - side-effect only
-    Base.metadata.create_all(bind=engine)
-    seed_data()

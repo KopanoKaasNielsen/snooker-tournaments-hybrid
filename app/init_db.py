@@ -8,7 +8,6 @@ from typing import Callable, Iterable, Iterator
 from sqlalchemy.orm import Session
 
 from app import models
-from app.database import SessionLocal
 
 # Default records used throughout the tests and during local development. The
 # lists are intentionally small to keep the seed procedure quick and fully
@@ -27,13 +26,16 @@ DEFAULT_TOURNAMENTS: tuple[str, ...] = ("Botswana Open",)
 
 
 @contextmanager
-def _session_scope(factory: Callable[[], Session] = SessionLocal) -> Iterator[Session]:
+def _session_scope(factory: Callable[[], Session]) -> Iterator[Session]:
     """Provide a transactional scope around a series of operations."""
 
     session = factory()
     try:
         yield session
         session.commit()
+    except Exception:
+        session.rollback()
+        raise
     finally:
         session.close()
 
@@ -49,7 +51,7 @@ def _ensure_records(session: Session, model, names: Iterable[str]) -> bool:
     return created
 
 
-def seed_data(session_factory: Callable[[], Session] = SessionLocal) -> None:
+def seed_data(session_factory: Callable[[], Session]) -> None:
     """Seed the database with default players and tournaments.
 
     The function is safe to call multiple times; it will only insert missing
@@ -58,7 +60,9 @@ def seed_data(session_factory: Callable[[], Session] = SessionLocal) -> None:
 
     with _session_scope(session_factory) as session:
         created_players = _ensure_records(session, models.Player, DEFAULT_PLAYERS)
-        created_tournaments = _ensure_records(session, models.Tournament, DEFAULT_TOURNAMENTS)
+        created_tournaments = _ensure_records(
+            session, models.Tournament, DEFAULT_TOURNAMENTS
+        )
 
         # ``session.commit`` is handled by ``_session_scope``; however, issuing an
         # explicit flush makes it easier to reason about when the objects hit the
@@ -68,4 +72,6 @@ def seed_data(session_factory: Callable[[], Session] = SessionLocal) -> None:
 
 
 if __name__ == "__main__":
-    seed_data()
+    from app.db_cli import main
+
+    main()

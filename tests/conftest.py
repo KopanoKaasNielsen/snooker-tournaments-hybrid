@@ -5,20 +5,19 @@ import tempfile
 # Existing tests import tests.conftest directly; share the same fixture engine.
 sys.modules.setdefault("tests.conftest", sys.modules[__name__])
 
-# Isolate import-time creation/seeding as well as per-test transactions.
+# Isolate all application connections before imports; no implicit demo seeding.
 _test_directory = tempfile.TemporaryDirectory(prefix="snooker-tests-")
 os.environ["DATABASE_URL"] = f"sqlite:///{_test_directory.name}/seed.db"
 
 import pytest
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app import models  # ensure models are registered
-from app.database import Base, get_db
+from app.database import Base, get_db, make_engine
 from app.main import app
 
 TEST_SQLITE_URL = f"sqlite:///{_test_directory.name}/test.db"
-engine = create_engine(TEST_SQLITE_URL, connect_args={"check_same_thread": False})
+engine = make_engine(TEST_SQLITE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -35,11 +34,14 @@ def fresh_database():
 
 
 @pytest.fixture(autouse=True)
-def override_get_db(monkeypatch):
+def override_get_db():
     def _override():
         db = TestingSessionLocal()
         try:
             yield db
+        except Exception:
+            db.rollback()
+            raise
         finally:
             db.close()
 

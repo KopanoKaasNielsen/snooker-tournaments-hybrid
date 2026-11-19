@@ -62,7 +62,7 @@ def test_distribute_prizes():
     distribute_prizes(db, tournament, prize_split=(0.6, 0.3, 0.1))
 
     for i, pid in enumerate(players[:3]):
-        p = db.query(Player).get(pid)
+        p = db.get(Player, pid)
         expected = round(tournament.entry_fee * 3 * [0.6, 0.3, 0.1][i], 2)
         assert p.balance == expected
 

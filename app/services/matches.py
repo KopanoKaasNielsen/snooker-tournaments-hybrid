@@ -4,7 +4,7 @@ from app.services.elo import update_elo_ratings
 
 
 def update_match_result(db: Session, match_id: int, winner_id: int):
-    match = db.query(Match).get(match_id)
+    match = db.get(Match, match_id)
     if not match:
         raise ValueError("Match not found")
 
@@ -19,8 +19,8 @@ def update_match_result(db: Session, match_id: int, winner_id: int):
         raise ValueError("Winner must be one of the players in the match")
 
     # Update Elo ratings
-    winner = db.query(Player).get(winner_id)
-    loser = db.query(Player).get(loser_id)
+    winner = db.get(Player, winner_id)
+    loser = db.get(Player, loser_id)
 
     winner.elo, loser.elo = update_elo_ratings(winner.elo, loser.elo)
 

@@ -1,39 +1,43 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PlayerBase(BaseModel):
     name: str
     rating: Optional[int] = 1500
 
+
 class PlayerCreate(PlayerBase):
     rating: int = 1500
+
 
 class Player(PlayerBase):
     id: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class TournamentBase(BaseModel):
     name: str
-    type: str = Field(..., description='league|knockout|double_elimination')
+    type: str = Field(..., description="league|knockout|double_elimination")
     date: Optional[datetime] = None
     entry_fee: Optional[int] = 0
     best_of: Optional[int] = 3
     race_to: Optional[int] = None
 
+
 class TournamentCreate(TournamentBase):
     pass
+
 
 class Tournament(TournamentBase):
     id: int
     status: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class TournamentRegistrationBase(BaseModel):
     player_id: int
@@ -41,12 +45,13 @@ class TournamentRegistrationBase(BaseModel):
     id: int
     tournament_id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class WinnerCreate(BaseModel):
     player_id: int = Field(...)
     position: int = Field(..., ge=1, le=4)
+
 
 class PlayerInTournament(BaseModel):
     player_id: int
@@ -54,8 +59,8 @@ class PlayerInTournament(BaseModel):
     tournament_id: Optional[int] = None
     id: Optional[int] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class TournamentResult(BaseModel):
     id: int
@@ -64,8 +69,8 @@ class TournamentResult(BaseModel):
     position: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 ################
 class MatchBase(BaseModel):
@@ -84,6 +89,7 @@ class MatchCreate(BaseModel):
 
 class MatchResult(BaseModel):
     """Used to report the result of a match."""
+
     score_player1: int
     score_player2: int
     winner_id: int
@@ -96,8 +102,8 @@ class Match(MatchBase):
     winner_id: Optional[int] = None
     completed_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class TournamentRegistrationCreate(BaseModel):
     player_id: int
@@ -106,13 +112,16 @@ class TournamentRegistrationCreate(BaseModel):
 class WalletAmount(BaseModel):
     amount: float = Field(..., gt=0)
 
+
 class PlayerBalanceOut(BaseModel):
     player_id: int
     balance: float
 
+
 class PlayerEloOut(BaseModel):
     player_id: int
     elo: int
+
 
 class PlayerOut(BaseModel):
     id: int
@@ -120,8 +129,8 @@ class PlayerOut(BaseModel):
     elo: int
     balance: float
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class WalletTransactionOut(BaseModel):
     id: int

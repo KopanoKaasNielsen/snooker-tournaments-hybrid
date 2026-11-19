@@ -63,6 +63,7 @@ Thumbs.db
 # Canvas and Codex
 /results/*
 !/results/frontend_stabilization_report.md
+!/results/database_stabilization_report.md
 .codex.yml
 
 .venv/

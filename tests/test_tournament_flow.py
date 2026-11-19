@@ -16,8 +16,12 @@ def create_players_with_balance(count: int, deposit_amount: float = 100.0) -> li
         response = client.post("/players/", json={"name": unique_name(f"Player {i}")})
         assert response.status_code == 200, f"Player creation failed: {response.text}"
         pid = response.json()["id"]
-        deposit = client.post(f"/players/{pid}/deposit", json={"amount": deposit_amount})
-        assert deposit.status_code == 200, f"Deposit failed for player {pid}: {deposit.text}"
+        deposit = client.post(
+            f"/players/{pid}/deposit", json={"amount": deposit_amount}
+        )
+        assert (
+            deposit.status_code == 200
+        ), f"Deposit failed for player {pid}: {deposit.text}"
         player_ids.append(pid)
     return player_ids
 
@@ -46,7 +50,6 @@ def test_full_tournament_flow():
         )
         assert r.status_code == 200, f"Failed to register player {pid}: {r.text}"
 
-
     # Complete tournament
     winners = [
         {"player_id": pid, "position": index + 1}
@@ -68,15 +71,12 @@ def test_register_same_player_twice():
         "race_to": 3,
         "entry_fee": 50,
     }
-    
+
     response = client.post("/tournaments/", json=tournament_data)
     assert response.status_code == 200, f"Unexpected response: {response.text}"
     tournament_id = response.json()["id"]
 
-
-
-
-# Register player twice
+    # Register player twice
     r1 = client.post(
         f"/tournaments/{tournament_id}/register",
         json={"player_id": player_id, "tournament_id": tournament_id},
@@ -87,7 +87,9 @@ def test_register_same_player_twice():
         f"/tournaments/{tournament_id}/register",
         json={"player_id": player_id, "tournament_id": tournament_id},
     )
-    assert r2.status_code == 400, f"Expected 400 duplicate error but got {r2.status_code}: {r2.text}"
+    assert (
+        r2.status_code == 400
+    ), f"Expected 400 duplicate error but got {r2.status_code}: {r2.text}"
 
 
 def test_complete_tournament_with_invalid_player():
@@ -111,7 +113,9 @@ def test_complete_tournament_with_invalid_player():
             f"/tournaments/{tournament_id}/register",
             json={"player_id": pid, "tournament_id": tournament_id},
         )
-        assert reg_resp.status_code == 200, f"Failed to register player {pid}: {reg_resp.text}"
+        assert (
+            reg_resp.status_code == 200
+        ), f"Failed to register player {pid}: {reg_resp.text}"
 
     winners = [
         {"player_id": player_ids[0], "position": 1},
@@ -119,4 +123,3 @@ def test_complete_tournament_with_invalid_player():
     ]
     r = client.post(f"/tournaments/{tournament_id}/complete", json=winners)
     assert r.status_code == 400, f"Expected 400 but got {r.status_code}: {r.text}"
-

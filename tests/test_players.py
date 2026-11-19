@@ -5,6 +5,7 @@ from app.models import Player
 
 client = TestClient(app)
 
+
 def test_wallet_transaction_history():
     r = client.post("/players/", json={"name": "LogTest"})
     pid = r.json()["id"]
@@ -18,7 +19,6 @@ def test_wallet_transaction_history():
     assert len(data) == 3
     assert data[0]["type"] == "deposit"
     assert data[-1]["type"] == "withdrawal"
-
 
 
 def test_balance_and_elo_endpoints():
@@ -40,6 +40,7 @@ def test_balance_and_elo_endpoints():
     r = client.get(f"/players/{pid}/elo")
     assert r.status_code == 200
     assert r.json()["elo"] == 1500
+
 
 def test_leaderboard_endpoint():
     db = TestingSessionLocal()

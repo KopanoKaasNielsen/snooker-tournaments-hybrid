@@ -40,10 +40,12 @@ jobs:
         run: |
           pytest -q
 
+      - name: Verify fresh migrations and ORM consistency
+        run: python -m scripts.verify_migrations
+
       - name: Check formatting with black
         run: |
-          python -m pip install black
-          black --check .
+          python -m black --check .
 
       - name: "Security: bandit"
         run: |

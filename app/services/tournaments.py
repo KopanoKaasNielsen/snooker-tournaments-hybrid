@@ -15,12 +15,12 @@ def distribute_prizes(db: Session, tournament: Tournament, prize_split=(1.0,)):
     if not winners:
         raise ValueError("No final standings provided for prize distribution.")
 
-    split = prize_split[:len(winners)]
+    split = prize_split[: len(winners)]
 
     for i, player_id in enumerate(winners):
         share = split[i] if i < len(split) else 0
         prize = round(prize_pool * share, 2)
-        player = db.query(Player).get(player_id)
+        player = db.get(Player, player_id)
         if player:
             player.balance += prize
 
@@ -80,9 +80,11 @@ def register_player(db: Session, tournament_id: int, player_id: int):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    existing = db.query(TournamentRegistration).filter_by(
-        tournament_id=tournament_id, player_id=player_id
-    ).first()
+    existing = (
+        db.query(TournamentRegistration)
+        .filter_by(tournament_id=tournament_id, player_id=player_id)
+        .first()
+    )
 
     if existing:
         raise HTTPException(status_code=400, detail="Player already registered")

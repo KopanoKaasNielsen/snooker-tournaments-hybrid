@@ -1,9 +1,10 @@
-from app.database import SessionLocal
+from app.init_db import DEFAULT_PLAYERS, seed_data
 from app.models import Player
+from tests.conftest import TestingSessionLocal
 
 
 def test_seeded_players_exist():
-    db = SessionLocal()
-    players = db.query(Player).all()
-    assert len(players) >= 1, "Expected at least one seeded player"
-    db.close()
+    seed_data(TestingSessionLocal)
+    with TestingSessionLocal() as db:
+        names = {player.name for player in db.query(Player).all()}
+        assert set(DEFAULT_PLAYERS) <= names

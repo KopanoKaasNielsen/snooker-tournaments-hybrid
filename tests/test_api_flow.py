@@ -33,13 +33,16 @@ async def test_api_flow():
 
         # 3. Register both players
         for pid in player_ids:
-            r = await client.post(f"/tournaments/{tid}/register", json={"player_id": pid})
+            r = await client.post(
+                f"/tournaments/{tid}/register", json={"player_id": pid}
+            )
             assert r.status_code == 200
 
         # 4. Generate matches (direct DB for now)
         db = TestingSessionLocal()
-        tournament = db.query(Tournament).get(tid)
+        tournament = db.get(Tournament, tid)
         from app.services.tournaments import generate_knockout_matches
+
         matches = generate_knockout_matches(db, tournament)
         assert len(matches) >= 1
         match = matches[0]

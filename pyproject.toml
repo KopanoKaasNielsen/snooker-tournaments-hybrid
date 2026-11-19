@@ -1,0 +1,9 @@
+[tool.black]
+# Historical files remain byte-for-byte unchanged; future revisions are formatted.
+extend-exclude = '''
+/(
+    migrations_backup/
+  | migrations/versions/dd093dfa2ebf_fresh_schema_with_created_at\.py
+  | migrations/versions/d27f9a18494f_add_scheduled_at_to_matches\.py
+)
+'''

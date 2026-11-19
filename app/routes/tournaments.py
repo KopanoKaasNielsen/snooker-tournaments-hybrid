@@ -13,7 +13,9 @@ router = APIRouter(prefix="/tournaments", tags=["tournaments"])
 
 
 @router.post("/", response_model=schemas.Tournament)
-def create_tournament(tournament: schemas.TournamentCreate, db: Session = Depends(get_db)):
+def create_tournament(
+    tournament: schemas.TournamentCreate, db: Session = Depends(get_db)
+):
     if isinstance(tournament.date, str):
         tournament.date = datetime.fromisoformat(tournament.date)
     return crud.create_tournament(db, tournament)
@@ -47,7 +49,7 @@ def register_player(
     return crud.register_player(db, tournament_id, registration.player_id)
 
 
-@router.post('/{tournament_id}/complete', response_model=List[schemas.TournamentResult])
+@router.post("/{tournament_id}/complete", response_model=List[schemas.TournamentResult])
 def complete_tournament(
     tournament_id: int,
     winners: List[schemas.WinnerCreate],

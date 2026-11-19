@@ -1,0 +1,148 @@
+# Database setup and migration guide
+
+## Preserve existing data first
+
+Never delete, replace, reset, or point test commands at `snooker.db`. Stop writers before an
+operational migration. Record `sha256sum snooker.db` and create a backup with SQLite's backup
+API, which includes a consistent view of WAL content. Copying only a live `.db` file may omit
+WAL transactions. Store backups outside version control with appropriate permissions.
+
+Example read-only-source backup to a **new, non-existing** path:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+import sqlite3
+source = Path('snooker.db').resolve()
+target = Path('/tmp/snooker-before-migration.db')
+if target.exists():
+    raise SystemExit('Choose a new backup filename; refusing to overwrite')
+with sqlite3.connect(source.as_uri() + '?mode=ro', uri=True) as original:
+    with sqlite3.connect(target) as backup:
+        original.backup(backup)
+print('Backup created; source was opened read-only')
+PY
+sha256sum snooker.db /tmp/snooker-before-migration.db
+```
+
+The backup's bytes/checksum need not equal the source under every SQLite journal/layout state;
+verify integrity and application rows as well. Never log database URLs containing credentials.
+
+## Fresh development database
+
+From the repository root, with Python 3.11/3.12 and requirements installed:
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+python -m pip install -r requirements.txt
+export DATABASE_URL=sqlite:////tmp/snooker-local-dev.db
+export APP_ENV=development
+python -m app.db_cli init
+python -m app.db_cli seed-demo --confirm-demo
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+Choose a fresh disposable file for first use. `init` runs migrations only and inserts no demo
+records. `seed-demo` is separate and repeatable. It requires `APP_ENV=development`, an explicit
+SQLite file URL, `--confirm-demo`, and a database at the migration head. Both development
+commands reject the repository's existing `snooker.db` (including resolved aliases).
+`python -m app.init_db` delegates to the same guarded CLI for compatibility; it no longer
+seeds merely by being imported or invoked without a command. Existing named demo records
+are preserved, including balances and ratings. Do not use demo seeding for production.
+
+`.env` is not automatically read by the shared engine/Alembic. Set `DATABASE_URL` in the
+process environment or your secret manager/service configuration. The default path remains
+`sqlite:///./snooker.db` for existing app compatibility, but running the application no longer
+creates its schema or inserts data. Startup requires operators to manage the schema first.
+
+## Alembic commands (disposable database)
+
+```bash
+export DATABASE_URL=sqlite:////tmp/snooker-migration-sandbox.db
+python -m alembic history
+python -m alembic heads
+python -m alembic current
+python -m alembic upgrade head
+python -m alembic check
+```
+
+The expected single head is `e20261119db01`; history contains three revisions. An empty fresh
+schema can be downgraded and rebuilt:
+
+```bash
+python -m alembic downgrade base
+python -m alembic upgrade head
+python -m alembic check
+```
+
+**Only perform that downgrade in an empty disposable database.** The corrective revision rejects
+populated tables. Historical revisions themselves are preserved and can be destructive if
+invoked directly against an old revision: never use downgrade as a production data rollback.
+Restore from a reviewed backup/forward fix instead. SQLite online migrations are verified;
+full offline `--sql` generation and PostgreSQL migration compatibility are not claimed.
+
+## Existing unversioned database
+
+The current `snooker.db` already has the six-table ORM schema, but no Alembic version table.
+Do not run `upgrade head` on the original: the base revision creates existing tables. Do not
+blindly stamp it. No original version adoption was performed during this task.
+
+Run the compatibility verifier first:
+
+```bash
+python -m scripts.verify_migrations --existing-copy-from snooker.db
+```
+
+This opens the source read-only and uses SQLite backup into a unique temporary directory.
+It verifies source-copy integrity, foreign keys and ORM schema equivalence. For an unversioned,
+schema-matched copy it demonstrates direct-upgrade rejection, explicitly announces stamping
+**the disposable copy**, then runs upgrade/current/check and compares all application rows.
+The temporary copy is removed on completion. The original is never stamped.
+
+A future operational adoption requires an operator to review that evidence, stop writers,
+back up the target, and explicitly authorize a stamp of the matching schema to the known
+revision `e20261119db01`. A stamp only records a version; it does not repair schema or records.
+That target-changing step is deliberately not automated here. If the actual schema differs,
+or the database is a populated historical revision, do not force it through this path: create
+a separately reviewed data migration addressing missing balances, dates and enum semantics.
+
+## Creating future revisions
+
+1. Work on a disposable migrated database; update models and create a new revision with
+   `python -m alembic revision --autogenerate -m 'describe change'`.
+2. Review every generated operation, data precondition and downgrade. Preserve old revisions.
+3. Test fresh upgrades, `alembic check`, and compatibility with representative backed-up data.
+4. Review financial changes, time-zone policies and data backfills explicitly before deployment.
+
+Shared metadata is `app.database.Base.metadata` with `app.models` registered. Application and
+Alembic both use environment configuration. Programmatic tests may supply an explicit
+`Config.attributes['database_url']`; the ini URL is a documented fallback example, not an
+override of the shared environment resolver. SQLite migrations use a private FK-disabled
+connection for batch DDL and check referential integrity before commit. Failed DDL/version
+updates are rolled back. Application connections always enable FKs.
+
+## Regression and CI verification
+
+```bash
+python -m pytest -q
+python -m black --check .
+python -m scripts.verify_migrations
+npm run typecheck
+npm run test:ci
+npm run build
+git diff --check
+sha256sum snooker.db
+```
+
+Backend tests manage their own temporary databases regardless of an inherited `DATABASE_URL`.
+The standalone migration verifier also uses explicit temporary URLs, so it is safe to run
+without setting an environment variable. Normal production migrations remain manual, explicit
+commands against a reviewed target. CI runs tests and fresh migration verification on Python
+3.11/3.12, and retains the frontend Node 24 job.
+
+If Black reports a missing `__mypyc` module, repair the installed wheel at the same pinned
+version with `python -m pip install --force-reinstall --no-deps black==24.4.2`, then run
+`python -m black --version`. The local environment was repaired this way; no dependency
+upgrade was necessary. Existing virtualenv files happen to be tracked in this repository;
+removing them from history/index is deferred and must not be mixed with database changes.
