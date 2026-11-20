@@ -1,0 +1,12 @@
+# Minimal FastAPI installation: no CLI/cloud/Jinja/email/OpenTelemetry extras.
+fastapi==0.163.2
+# Explicit security floor/pin for FastAPI's web framework.
+starlette==1.10.0
+python-multipart==0.0.34
+uvicorn[standard]==0.30.0
+sqlalchemy==2.0.30
+# Required by the shipped database CLI, not only by CI.
+alembic==1.13.1
+pydantic==2.12.5
+# Imported by the existing (currently unused) app.core.config module.
+pydantic-settings==2.14.2

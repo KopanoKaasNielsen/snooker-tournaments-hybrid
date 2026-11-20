@@ -2,14 +2,28 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+      - 'fix/**'
+      - 'chore/**'
+      - stabilization-phase-2
   pull_request:
     branches: [ main, develop ]
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       matrix:
         python-version: [3.11, 3.12]
@@ -22,23 +36,32 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements*.txt
+            requirements/*.in
+            requirements/*.txt
 
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Install dependencies
+      - name: Install and verify isolated runtime dependencies
         run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          python -m venv "$RUNNER_TEMP/backend"
+          echo "$RUNNER_TEMP/backend/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/backend/bin/python" -m pip install -r requirements/bootstrap.txt
+          "$RUNNER_TEMP/backend/bin/python" -m pip install -r requirements.txt
+          "$RUNNER_TEMP/backend/bin/python" -m pip check
+          "$RUNNER_TEMP/backend/bin/python" -W error -m scripts.verify_dependency_environment --runtime-only
+
+      - name: Install development dependencies
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip check
+
+      - name: Verify API contract and migrated startup
+        run: python -W error -m scripts.verify_dependency_environment
 
       - name: Run tests
         run: |
-          pytest -q
+          python -m pytest -q -W error --basetemp "$RUNNER_TEMP/pytest"
 
       - name: Verify fresh migrations and ORM consistency
         run: python -m scripts.verify_migrations
@@ -47,18 +70,29 @@ jobs:
         run: |
           python -m black --check .
 
-      - name: "Security: bandit"
+      # Scanner dependencies are isolated; findings/tool errors remain advisory.
+      - name: Install isolated security tools (advisory)
+        continue-on-error: true
+        timeout-minutes: 5
         run: |
-          pip install bandit
-          bandit -q -r app || true
+          python -m venv "$RUNNER_TEMP/security-tools"
+          "$RUNNER_TEMP/security-tools/bin/python" -m pip install -r requirements-security.txt
 
-      - name: "Dependencies: safety"
+      - name: "Security (advisory): Bandit"
+        continue-on-error: true
+        timeout-minutes: 5
+        run: '"$RUNNER_TEMP/security-tools/bin/bandit" -q -r app'
+
+      - name: "Dependencies (advisory): pip-audit"
+        continue-on-error: true
+        timeout-minutes: 5
         run: |
-          pip install safety
-          safety check -r requirements.txt || true
+          python -m pip freeze --all > "$RUNNER_TEMP/backend-resolved.txt"
+          "$RUNNER_TEMP/security-tools/bin/pip-audit" -r "$RUNNER_TEMP/backend-resolved.txt" --no-deps --disable-pip
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

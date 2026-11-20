@@ -1,0 +1,4 @@
+# Security tooling is isolated from runtime and development packages.
+-r requirements/bootstrap.txt
+-c requirements/scanners-constraints.txt
+-r requirements/scanners.in

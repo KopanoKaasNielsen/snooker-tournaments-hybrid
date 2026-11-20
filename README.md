@@ -4,9 +4,12 @@ Clean architecture for managing snooker tournaments.
 
 ## Quickstart
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+python3.12 -m venv ~/.venvs/snooker-hybrid
+source ~/.venvs/snooker-hybrid/bin/activate
+python -m pip install -r requirements/bootstrap.txt
+python -m pip install -r requirements-dev.txt
+python -m pip check
+# Runtime deployments install requirements.txt instead of requirements-dev.txt.
 
 # Use a NEW disposable development database, not the existing snooker.db.
 export DATABASE_URL=sqlite:////tmp/snooker-local-dev.db
@@ -71,8 +74,8 @@ npm run lint
 npm run test:ci
 npm run build
 npm run preview -- --host 0.0.0.0
-source venv/bin/activate
-python -m pytest -q
+source ~/.venvs/snooker-hybrid/bin/activate
+python -m pytest -q -W error
 ```
 
 `lint` currently performs TypeScript checking only, not ESLint. Jest tests mock network
@@ -102,3 +105,40 @@ See [the API contract](docs/frontend-api-contract.md) and
 
 Database stabilization findings and actual verification results are recorded in
 [the Task 02 report](results/database_stabilization_report.md).
+
+## Continuous integration
+
+CI runs on pushes to `main`, `develop`, `feature/**`, `fix/**`, `chore/**` and
+`stabilization-phase-2`, and on pull requests targeting `main` or `develop`. Manual
+`workflow_dispatch` remains enabled (GitHub requires the workflow on the default branch for
+dispatch availability). Newer runs cancel superseded runs for the same workflow/ref.
+
+The Python 3.11/3.12 matrix installs requirements, runs pytest with warnings as errors,
+verifies fresh Alembic migrations/ORM consistency and checks Black formatting. The Node 24 job
+runs `npm ci`, typecheck, Jest and production build. Tests and migration verification use
+temporary SQLite databases; no production database or application secrets are needed.
+
+Bandit and pip-audit run in a separate constrained environment and remain **advisory only** via `continue-on-error`: findings, scanner install
+failures and scanner service/authentication failures do not fail the job. Review their step
+logs; a green workflow does not mean security scans passed. See
+[the CI pipeline report](results/ci_pipeline_report.md) for actual local results, security
+limitations and commands to push and monitor the first GitHub-hosted run. Local success is
+not evidence of a successful remote run. Task 02C resolves the earlier clean-install blocker;
+42 backend tests now pass under strict warnings on Python 3.11 and 3.12.
+
+## Python dependencies
+
+Runtime and development requirements are separate and share a complete transitive constraints
+file. CI installs `requirements-dev.txt`; production installs `requirements.txt`. Bootstrap
+pip/setuptools are pinned too. Use a new external virtualenv rather than the tracked `venv/`.
+See [dependency management](docs/dependency-management.md) for exact versions, regeneration,
+security sources, isolated audits and clean runtime/development setup, and
+[the Task 02C report](results/dependency_stabilization_report.md) for actual results.
+
+```bash
+python -W error -m scripts.verify_dependency_environment
+python -m scripts.verify_migrations --existing-copy-from snooker.db
+```
+
+These commands only migrate disposable databases. The OpenAPI snapshot is preserved; optional
+framework validation-error details are distinguished from application contract changes.

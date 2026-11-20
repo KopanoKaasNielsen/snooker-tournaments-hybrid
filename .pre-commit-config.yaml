@@ -1,7 +1,9 @@
 repos:
   - repo: https://github.com/psf/black
-    rev: 24.4.2
-    hooks: [ { id: black } ]
+    rev: 26.10.1
+    hooks:
+      - id: black
+        exclude: '^(migrations_backup/|migrations/versions/(dd093dfa2ebf|d27f9a18494f|e20261119db01))'
   - repo: https://github.com/PyCQA/isort
     rev: 5.13.2
     hooks: [ { id: isort } ]

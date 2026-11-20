@@ -64,6 +64,8 @@ Thumbs.db
 /results/*
 !/results/frontend_stabilization_report.md
 !/results/database_stabilization_report.md
+!/results/ci_pipeline_report.md
+!/results/dependency_stabilization_report.md
 .codex.yml
 
 .venv/

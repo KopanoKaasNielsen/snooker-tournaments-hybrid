@@ -33,9 +33,10 @@ verify integrity and application rows as well. Never log database URLs containin
 From the repository root, with Python 3.11/3.12 and requirements installed:
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-python -m pip install -r requirements.txt
+python3.12 -m venv ~/.venvs/snooker-hybrid
+source ~/.venvs/snooker-hybrid/bin/activate
+python -m pip install -r requirements/bootstrap.txt
+python -m pip install -r requirements-dev.txt
 export DATABASE_URL=sqlite:////tmp/snooker-local-dev.db
 export APP_ENV=development
 python -m app.db_cli init
@@ -141,8 +142,7 @@ without setting an environment variable. Normal production migrations remain man
 commands against a reviewed target. CI runs tests and fresh migration verification on Python
 3.11/3.12, and retains the frontend Node 24 job.
 
-If Black reports a missing `__mypyc` module, repair the installed wheel at the same pinned
-version with `python -m pip install --force-reinstall --no-deps black==24.4.2`, then run
-`python -m black --version`. The local environment was repaired this way; no dependency
-upgrade was necessary. Existing virtualenv files happen to be tracked in this repository;
-removing them from history/index is deferred and must not be mixed with database changes.
+Use the patched formatter and clean external environment documented in
+[dependency management](dependency-management.md), rather than reinstalling the old vulnerable
+Black pin from the Task 02 baseline. Existing virtualenv files happen to be tracked in this
+repository; no untracking or history cleanup was performed during stabilization.
