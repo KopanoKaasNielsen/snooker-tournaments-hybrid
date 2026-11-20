@@ -10,3 +10,7 @@ alembic==1.13.1
 pydantic==2.12.5
 # Imported by the existing (currently unused) app.core.config module.
 pydantic-settings==2.14.2
+
+# Authentication: supported Argon2id/password hashing and JWT validation.
+argon2-cffi==25.1.0
+PyJWT==2.15.1

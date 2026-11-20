@@ -137,3 +137,10 @@ class WalletTransactionOut(BaseModel):
     type: str
     amount: float
     timestamp: str
+
+
+class PublicLeaderboardPlayer(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    elo: int

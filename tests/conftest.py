@@ -1,6 +1,7 @@
 import os
 import sys
 import tempfile
+import secrets
 
 # Existing tests import tests.conftest directly; share the same fixture engine.
 sys.modules.setdefault("tests.conftest", sys.modules[__name__])
@@ -8,6 +9,10 @@ sys.modules.setdefault("tests.conftest", sys.modules[__name__])
 # Isolate all application connections before imports; no implicit demo seeding.
 _test_directory = tempfile.TemporaryDirectory(prefix="snooker-tests-")
 os.environ["DATABASE_URL"] = f"sqlite:///{_test_directory.name}/seed.db"
+
+os.environ["AUTH_SECRET_KEY"] = secrets.token_urlsafe(48)
+os.environ["APP_ENV"] = "development"
+os.environ["AUTH_COOKIE_SECURE"] = "false"
 
 import pytest
 from sqlalchemy.orm import sessionmaker
@@ -48,3 +53,53 @@ def override_get_db():
     app.dependency_overrides[get_db] = _override
     yield
     app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.fixture
+def account_factory():
+    """Real DB users/sessions for permission tests, never a dependency bypass."""
+    import uuid
+    from functools import lru_cache
+    from app.models import User, Player
+    from app.security import create_session, hash_password
+
+    def create(
+        role="player",
+        *,
+        linked=True,
+        username=None,
+        password="Correct Horse Battery Staple!1",
+    ):
+        name = username or "user_" + uuid.uuid4().hex[:12]
+        with TestingSessionLocal() as db:
+            player = Player(name=name) if linked else None
+            if player:
+                db.add(player)
+                db.flush()
+            user = User(
+                username=name,
+                password_hash=hash_password(password),
+                role=role,
+                player_id=player.id if player else None,
+            )
+            db.add(user)
+            db.flush()
+            token, refresh = create_session(db, user)
+            result = {
+                "id": user.id,
+                "username": name,
+                "player_id": user.player_id,
+                "password": password,
+                "token": token,
+                "refresh": refresh,
+                "headers": {"Authorization": "Bearer " + token},
+            }
+            db.commit()
+            return result
+
+    return create
+
+
+@pytest.fixture
+def admin_headers(account_factory):
+    return account_factory("administrator", linked=False)["headers"]

@@ -14,6 +14,9 @@ python -m pip check
 # Use a NEW disposable development database, not the existing snooker.db.
 export DATABASE_URL=sqlite:////tmp/snooker-local-dev.db
 export APP_ENV=development
+export AUTH_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')"
+export AUTH_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+export AUTH_COOKIE_SECURE=false  # development HTTP only
 python -m app.db_cli init
 python -m app.db_cli seed-demo --confirm-demo  # optional demo data
 
@@ -95,13 +98,56 @@ host firewall and has to be checked from the device.
 
 ### Supported behavior and gaps
 
-Dashboard reads real tournaments. Wallet lets you explicitly choose a public player and reads
-balance/history, without financial write controls or an assumed currency. Login, authenticated
-profile, saved settings and logout are unavailable because no backend authentication or settings
-contract exists. No protected routes are implied. Existing backend financial mutation endpoints
-are unauthenticated: review access control before exposing the backend publicly.
-See [the API contract](docs/frontend-api-contract.md) and
-[stabilization report](results/frontend_stabilization_report.md).
+Register and sign in using real backend accounts. Dashboard, wallet, profile and settings
+routes require a session. Wallet balance/history are restricted to the server-linked player;
+there is no arbitrary player selector. Organiser and administrator navigation follows the
+current account role; the server independently enforces ownership and tournament assignments.
+Settings persistence remains unavailable. Every financial mutation, including fee-bearing
+registration, returns an explicit denial until Task 04. Free registration and standings-only
+completion remain available to authorised accounts.
+See [the current API contract](docs/frontend-api-contract.md),
+[security architecture](docs/authentication-security-architecture.md) and
+[Task 03 verification report](results/authentication_implementation_report.md).
+
+### Authentication configuration and administrator setup
+
+The quickstart generates a development-only signing key without printing it. Retain a securely
+managed key between server restarts if sessions should survive. Never put it in a `VITE_` value,
+source control, logs or browser storage. `AUTH_SECRET_KEY` is mandatory; the legacy configuration
+placeholder is never used. Access tokens last five minutes; rotating HttpOnly refresh cookies
+expire after seven days. Logout, deactivation and role changes revoke sessions immediately.
+
+Production requires HTTPS, explicit `AUTH_ALLOWED_ORIGINS` (comma-separated exact origins),
+`AUTH_COOKIE_SECURE=true` (default), and a securely generated signing key delivered by the
+host's secret manager. Use same-origin `/api` reverse proxying. `APP_ENV=development` plus
+`AUTH_COOKIE_SECURE=false` is only for trusted local HTTP development. Authentication endpoints
+require `X-Snooker-Client: web`; the shared frontend client supplies it. Different-site browser
+API hosting is unsupported by SameSite=Strict cookies; prefer the same-origin proxy.
+
+On a **new, migrated development database** and with the same auth environment, create the
+first administrator explicitly:
+
+```bash
+python -m app.auth_cli create-admin --username initial_admin
+```
+
+The command prompts for the password twice without echoing it, grants no player ownership, and
+does not alter an existing account. Never point this setup command at the preserved original
+`snooker.db`. Public registration always grants Player; administrators can assign Organiser and
+Administrator roles through `/admin/users/{id}/role` or the administration page. Existing players
+remain unclaimed. Existing-player account linking awaits policy approval and has no enabled
+endpoint. Administrators assign existing tournaments via
+`PUT /admin/tournaments/{id}/organisers` with `{ "user_id": organiserId }`.
+
+For mobile HTTP development add the exact phone-visible frontend origin, for example
+`http://192.168.1.20:5173`, to `AUTH_ALLOWED_ORIGINS` before starting FastAPI. Keep requests
+through Vite's same-origin `/api` proxy; no backend port exposure is necessary. Without this
+explicit origin authentication will be denied. WSL/firewall limitations described above still apply.
+
+Backend tests generate an ephemeral signing key and disposable databases automatically. The
+runtime/contract verification script does the same internally; CI needs no production credentials.
+The historical unauthenticated OpenAPI snapshot is retained; the new authentication snapshot
+is checked separately to make the intentional access-control contract changes reviewable.
 
 Database stabilization findings and actual verification results are recorded in
 [the Task 02 report](results/database_stabilization_report.md).

@@ -7,6 +7,7 @@ from app.time import utc_now
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     Enum,
@@ -181,3 +182,66 @@ class WalletTransaction(Base):
     timestamp = Column(DateTime, default=utc_now, nullable=False)
 
     player = relationship("Player", back_populates="transactions")
+
+
+class User(Base):
+    """Login identity; ownership is a unique server-controlled link."""
+
+    __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('player', 'organiser', 'administrator')", name="user_role"
+        ),
+    )
+    id = Column(Integer, primary_key=True)
+    username = Column(String(64), unique=True, nullable=False)
+    password_hash = Column(String(512), nullable=False)
+    role = Column(String(20), nullable=False, default="player")
+    is_active = Column(Boolean, nullable=False, default=True)
+    player_id = Column(Integer, ForeignKey("players.id"), unique=True, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+    id = Column(String(36), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+    expires_at = Column(DateTime, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+    id = Column(Integer, primary_key=True)
+    token_hash = Column(String(64), nullable=False, unique=True)
+    session_id = Column(
+        String(36), ForeignKey("auth_sessions.id"), nullable=False, index=True
+    )
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+    expires_at = Column(DateTime, nullable=False)
+    consumed_at = Column(DateTime, nullable=True)
+
+
+class TournamentOrganiser(Base):
+    __tablename__ = "tournament_organisers"
+    tournament_id = Column(Integer, ForeignKey("tournaments.id"), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+
+
+class AuthAuditEvent(Base):
+    __tablename__ = "auth_audit_events"
+    id = Column(Integer, primary_key=True)
+    event = Column(String(64), nullable=False)
+    success = Column(Boolean, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    target_id = Column(Integer, nullable=True)
+    reason = Column(String(200), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class AuthRateLimit(Base):
+    __tablename__ = "auth_rate_limits"
+    bucket = Column(String(64), primary_key=True)
+    attempts = Column(Integer, nullable=False)
+    expires_at = Column(DateTime, nullable=False)

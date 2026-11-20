@@ -1,8 +1,18 @@
+import pytest
+from app.services import wallet
+from tests.conftest import TestingSessionLocal
 from fastapi.testclient import TestClient
 from app.main import app
 import uuid
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def authenticated_client(admin_headers):
+    client.headers.update(admin_headers)
+    yield
+    client.headers.clear()
 
 
 def unique_name(base: str) -> str:
@@ -15,12 +25,10 @@ def create_players_with_balance(count: int, deposit_amount: float = 100.0) -> li
         response = client.post("/players/", json={"name": unique_name(f"Player {i}")})
         assert response.status_code == 200, f"Player creation failed: {response.text}"
         pid = response.json()["id"]
-        deposit = client.post(
-            f"/players/{pid}/deposit", json={"amount": deposit_amount}
-        )
-        assert (
-            deposit.status_code == 200
-        ), f"Deposit failed for player {pid}: {deposit.text}"
+        with TestingSessionLocal() as db:
+            wallet.deposit(
+                db, pid, deposit_amount
+            )  # Isolated fixture funding, never an API bypass.
         player_ids.append(pid)
     return player_ids
 
@@ -34,7 +42,7 @@ def test_full_tournament_flow():
         "date": "2025-09-15T12:00:00",
         "best_of": 5,
         "race_to": 3,
-        "entry_fee": 50,
+        "entry_fee": 0,
     }
     response = client.post("/tournaments/", json=tournament_data)
     assert response.status_code == 200, f"Unexpected response: {response.text}"
@@ -68,7 +76,7 @@ def test_register_same_player_twice():
         "date": "2025-09-16T12:00:00",
         "best_of": 5,
         "race_to": 3,
-        "entry_fee": 50,
+        "entry_fee": 0,
     }
 
     response = client.post("/tournaments/", json=tournament_data)
@@ -98,7 +106,7 @@ def test_complete_tournament_with_invalid_player():
         "date": "2025-09-17T12:00:00",
         "best_of": 5,
         "race_to": 3,
-        "entry_fee": 50,
+        "entry_fee": 0,
     }
     response = client.post("/tournaments/", json=tournament_data)
     assert response.status_code == 200, f"Unexpected response: {response.text}"

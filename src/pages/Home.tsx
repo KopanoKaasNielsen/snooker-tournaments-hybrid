@@ -5,8 +5,8 @@ export default function Home() {
     <section className="page" aria-labelledby="home-heading">
       <h2 id="home-heading">Snooker Tournaments Hybrid</h2>
       <p>
-        Review tournament records and player wallet balances from the backend. Account sign-in
-        and saved preferences are not currently available.
+        Sign in to review tournament records and your private player wallet. Financial mutations
+        and saved preferences remain unavailable.
       </p>
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         <Link to="/dashboard">View dashboard</Link>

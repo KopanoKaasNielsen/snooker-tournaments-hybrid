@@ -68,7 +68,7 @@ python -m alembic upgrade head
 python -m alembic check
 ```
 
-The expected single head is `e20261119db01`; history contains three revisions. An empty fresh
+The expected single head is `f20261120auth`; history contains four revisions. An empty fresh
 schema can be downgraded and rebuilt:
 
 ```bash
@@ -85,7 +85,7 @@ full offline `--sql` generation and PostgreSQL migration compatibility are not c
 
 ## Existing unversioned database
 
-The current `snooker.db` already has the six-table ORM schema, but no Alembic version table.
+The preserved `snooker.db` has the six-table pre-authentication schema, but no Alembic version table.
 Do not run `upgrade head` on the original: the base revision creates existing tables. Do not
 blindly stamp it. No original version adoption was performed during this task.
 
@@ -96,9 +96,11 @@ python -m scripts.verify_migrations --existing-copy-from snooker.db
 ```
 
 This opens the source read-only and uses SQLite backup into a unique temporary directory.
-It verifies source-copy integrity, foreign keys and ORM schema equivalence. For an unversioned,
-schema-matched copy it demonstrates direct-upgrade rejection, explicitly announces stamping
-**the disposable copy**, then runs upgrade/current/check and compares all application rows.
+It verifies source-copy integrity, foreign keys and schema equivalence against the pre-authentication
+or current ORM metadata. For an unversioned, schema-matched copy it demonstrates direct-upgrade
+rejection, explicitly announces stamping **the disposable copy** at the matching baseline
+(`e20261119db01` for the six-table original), then upgrades to `f20261120auth`, runs current/check
+and compares all original application rows. Added authentication tables must be empty.
 The temporary copy is removed on completion. The original is never stamped.
 
 A future operational adoption requires an operator to review that evidence, stop writers,

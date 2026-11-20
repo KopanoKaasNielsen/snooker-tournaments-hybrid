@@ -1,4 +1,6 @@
+import pytest
 from fastapi.testclient import TestClient
+from app.services import wallet
 from app.main import app
 from tests.conftest import TestingSessionLocal
 from app.models import Player
@@ -6,13 +8,21 @@ from app.models import Player
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def authenticated_client(admin_headers):
+    client.headers.update(admin_headers)
+    yield
+    client.headers.clear()
+
+
 def test_wallet_transaction_history():
     r = client.post("/players/", json={"name": "LogTest"})
     pid = r.json()["id"]
 
-    client.post(f"/players/{pid}/deposit", json={"amount": 100})
-    client.post(f"/players/{pid}/deposit", json={"amount": 50})
-    client.post(f"/players/{pid}/withdraw", json={"amount": 30})
+    with TestingSessionLocal() as db:
+        wallet.deposit(db, pid, 100)
+        wallet.deposit(db, pid, 50)
+        wallet.withdraw(db, pid, 30)  # Isolated fixture setup only.
 
     r = client.get(f"/players/{pid}/transactions")
     data = r.json()
@@ -28,8 +38,10 @@ def test_balance_and_elo_endpoints():
     pid = r.json()["id"]
 
     # Deposit to wallet
-    r = client.post(f"/players/{pid}/deposit", json={"amount": 150})
-    assert r.status_code == 200
+    with TestingSessionLocal() as db:
+        wallet.deposit(
+            db, pid, 150
+        )  # HTTP mutations intentionally disabled by Task 03.
 
     # Get balance
     r = client.get(f"/players/{pid}/balance")
@@ -62,3 +74,6 @@ def test_leaderboard_endpoint():
     data = r.json()
     assert len(data) >= 3
     assert data[0]["elo"] >= data[1]["elo"] >= data[2]["elo"]
+
+    # Leaderboard must not expose private wallet balances.
+    assert all("balance" not in player for player in data)

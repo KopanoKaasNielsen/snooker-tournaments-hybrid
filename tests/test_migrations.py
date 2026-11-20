@@ -18,7 +18,7 @@ from app.db_cli import migration_config
 from app.init_db import DEFAULT_PLAYERS
 
 ROOT = Path(__file__).resolve().parents[1]
-HEAD = "e20261119db01"
+HEAD = "f20261120auth"
 
 
 def configuration(tmp_path):
@@ -30,6 +30,7 @@ def test_revision_graph_has_one_complete_head(tmp_path):
     assert script.get_heads() == [HEAD]
     assert [revision.revision for revision in script.walk_revisions()] == [
         HEAD,
+        "e20261119db01",
         "d27f9a18494f",
         "dd093dfa2ebf",
     ]
@@ -100,7 +101,7 @@ def test_populated_head_downgrade_is_refused(tmp_path):
             session.add(Player(name="Keep", balance=42.25))
             session.commit()
         with pytest.raises(RuntimeError, match="reviewed data migration"):
-            command.downgrade(config, "-1")
+            command.downgrade(config, "d27f9a18494f")
         with migrated.connect() as connection:
             assert connection.scalar(text("SELECT balance FROM players")) == 42.25
             assert MigrationContext.configure(connection).get_current_revision() == HEAD
@@ -178,7 +179,7 @@ def test_failed_migration_rolls_back_ddl_and_revision(tmp_path):
     command.upgrade(config, "head")
     (copy / "versions" / "test_failure.py").write_text(
         "from alembic import op\nimport sqlalchemy as sa\n"
-        "revision = 'test_failure'\ndown_revision = 'e20261119db01'\n"
+        "revision = 'test_failure'\ndown_revision = 'f20261120auth'\n"
         "def upgrade():\n"
         "    op.create_table('must_rollback', sa.Column('id', sa.Integer()))\n"
         "    raise RuntimeError('deliberate failure')\n"
@@ -228,3 +229,57 @@ def test_inconsistent_schema_copy_is_not_stamped(tmp_path):
             ).fetchall()
             == []
         )
+
+
+def test_auth_upgrade_preserves_existing_players_and_downgrade_preserves_legacy(
+    tmp_path,
+):
+    config = configuration(tmp_path)
+    command.upgrade(config, "e20261119db01")
+    migrated = make_engine(config.attributes["database_url"])
+    try:
+        from app.models import Player
+
+        with sessionmaker(bind=migrated)() as session:
+            session.add(Player(name="Pre-auth owner", balance=123.45))
+            session.commit()
+        command.upgrade(config, "head")
+        command.check(config)
+        with migrated.connect() as connection:
+            assert connection.scalar(text("SELECT balance FROM players")) == 123.45
+            assert connection.scalar(text("SELECT count(*) FROM users")) == 0
+        command.downgrade(config, "e20261119db01")
+        with migrated.connect() as connection:
+            assert connection.scalar(text("SELECT balance FROM players")) == 123.45
+            assert "users" not in inspect(connection).get_table_names()
+        command.upgrade(config, "head")
+        command.check(config)
+    finally:
+        migrated.dispose()
+
+
+def test_auth_downgrade_refuses_populated_authentication_tables(tmp_path):
+    config = configuration(tmp_path)
+    command.upgrade(config, "head")
+    migrated = make_engine(config.attributes["database_url"])
+    try:
+        from app.models import User
+        from app.security import hash_password
+
+        with sessionmaker(bind=migrated)() as session:
+            session.add(
+                User(
+                    username="keep_account",
+                    password_hash=hash_password("Keep this account password!"),
+                )
+            )
+            session.commit()
+        with pytest.raises(RuntimeError, match="authentication"):
+            command.downgrade(config, "e20261119db01")
+        with migrated.connect() as connection:
+            assert (
+                connection.scalar(text("SELECT username FROM users")) == "keep_account"
+            )
+            assert MigrationContext.configure(connection).get_current_revision() == HEAD
+    finally:
+        migrated.dispose()

@@ -11,6 +11,7 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.runtime.migration import MigrationContext
 from sqlalchemy.exc import OperationalError
+from sqlalchemy import MetaData
 
 from app.database import Base, make_engine
 from app.db_cli import migration_config
@@ -24,10 +25,15 @@ def snapshot(connection):
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'alembic_version' ORDER BY name"
         )
     ]
-    return {
-        name: connection.execute(f'SELECT * FROM "{name}" ORDER BY id').fetchall()
-        for name in tables
-    }
+    result = {}
+    for name in tables:
+        quoted = '"' + name.replace('"', '""') + '"'
+        columns = connection.execute(f"PRAGMA table_info({quoted})").fetchall()
+        order = ", ".join(str(index + 1) for index in range(len(columns)))
+        result[name] = connection.execute(
+            f"SELECT * FROM {quoted} ORDER BY {order}"
+        ).fetchall()
+    return result
 
 
 def verify_existing_copy(source: Path, target: Path) -> None:
@@ -51,7 +57,21 @@ def verify_existing_copy(source: Path, target: Path) -> None:
             differences = compare_metadata(
                 MigrationContext.configure(connection), Base.metadata
             )
-        if differences:
+        legacy = MetaData()
+        for name in (
+            "players",
+            "tournaments",
+            "matches",
+            "tournament_registrations",
+            "tournament_results",
+            "wallet_transactions",
+        ):
+            Base.metadata.tables[name].to_metadata(legacy)
+        with engine.connect() as connection:
+            legacy_differences = compare_metadata(
+                MigrationContext.configure(connection), legacy
+            )
+        if differences and (revision is not None or legacy_differences):
             raise RuntimeError(
                 "Existing schema differs from ORM; review required, no stamping performed"
             )
@@ -69,16 +89,24 @@ def verify_existing_copy(source: Path, target: Path) -> None:
             with sqlite3.connect(target) as copy:
                 assert snapshot(copy) == before
             print(
-                "Explicit verification-only adoption: stamp head on disposable, schema-matched copy."
+                "Explicit verification-only adoption on disposable, schema-matched copy."
             )
-            command.stamp(config, "head")
+            adoption_revision = "e20261119db01" if differences else "head"
+            print(
+                f"Explicit disposable-copy stamp: {adoption_revision}; original remains untouched."
+            )
+            command.stamp(config, adoption_revision)
         command.upgrade(config, "head")
         command.current(config)
         command.check(config)
         with sqlite3.connect(target) as copy:
-            assert (
-                snapshot(copy) == before
-            ), "Application data changed in compatibility check"
+            after = snapshot(copy)
+            assert all(
+                after[name] == rows for name, rows in before.items()
+            ), "Application data changed"
+            assert all(
+                not rows for name, rows in after.items() if name not in before
+            ), "Unexpected migration data"
         print("Existing-copy compatibility passed: all rows and values preserved.")
     finally:
         engine.dispose()

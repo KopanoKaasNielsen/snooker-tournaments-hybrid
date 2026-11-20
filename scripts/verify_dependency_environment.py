@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import copy
 import importlib
 import importlib.util
 import json
 import os
+import secrets
 from pathlib import Path
 import subprocess
 import sys
@@ -18,32 +18,35 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def check_contract(current: dict) -> None:
-    current = copy.deepcopy(current)
-    baseline = json.loads((ROOT / "docs/backend-openapi.json").read_text())
-    # New FastAPI documents optional validation error context/input. Neither changes
-    # request validation or successful responses; do not normalize application schemas.
-    properties = current["components"]["schemas"]["ValidationError"]["properties"]
-    for name in ("ctx", "input"):
-        assert (
-            name not in current["components"]["schemas"]["ValidationError"]["required"]
-        )
-        properties.pop(name, None)
-    assert (
-        current == baseline
-    ), "API snapshot differs beyond reviewed framework error details"
-    print(
-        "API snapshot matches: only optional framework ValidationError ctx/input additions."
-    )
+    baseline = json.loads((ROOT / "docs/authentication-openapi.json").read_text())
+    assert current == baseline, "Authentication API contract snapshot differs"
+    print("Authentication API contract matches the reviewed additive snapshot.")
 
 
 async def check_startup(app) -> None:
     async with app.router.lifespan_context(app):
         for path, status, expected in [
             ("/health", 200, {"ok": True}),
-            ("/players/", 200, []),
-            ("/tournaments/", 200, []),
-            ("/matches/", 200, []),
-            ("/players/1/balance", 404, {"detail": "Player not found"}),
+            (
+                "/players/",
+                401,
+                {"detail": "Session expired or invalid. Please sign in."},
+            ),
+            (
+                "/tournaments/",
+                401,
+                {"detail": "Session expired or invalid. Please sign in."},
+            ),
+            (
+                "/matches/",
+                401,
+                {"detail": "Session expired or invalid. Please sign in."},
+            ),
+            (
+                "/players/1/balance",
+                401,
+                {"detail": "Session expired or invalid. Please sign in."},
+            ),
         ]:
             messages = []
             request_sent = False
@@ -84,7 +87,7 @@ async def check_startup(app) -> None:
             body = b"".join(message.get("body", b"") for message in messages)
             assert json.loads(body) == expected, path
     print(
-        "Migrated startup/health/list/balance-404 checks passed (direct ASGI; no test client)."
+        "Migrated startup, health and unauthenticated-denial checks passed (direct ASGI; no test client)."
     )
 
 
@@ -100,6 +103,10 @@ def main() -> None:
     with tempfile.TemporaryDirectory(
         prefix="snooker-runtime-verification-"
     ) as directory:
+        os.environ["AUTH_SECRET_KEY"] = secrets.token_urlsafe(64)
+        os.environ["APP_ENV"] = "development"
+        os.environ["AUTH_COOKIE_SECURE"] = "false"
+        os.environ["AUTH_ALLOWED_ORIGINS"] = "http://127.0.0.1:5173"
         os.environ["DATABASE_URL"] = f"sqlite:///{directory}/runtime.db"
         subprocess.run(
             [sys.executable, "-m", "alembic", "upgrade", "head"], cwd=ROOT, check=True

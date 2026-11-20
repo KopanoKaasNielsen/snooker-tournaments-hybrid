@@ -7,7 +7,7 @@
 Relative SQLite paths resolve from the working directory. Environment files are not implicitly
 loaded by this module or Alembic; export the variable explicitly. URLs are never logged by our
 configuration code. The old, unused `app/core/config.py` settings object does not configure
-the engine and is not an authentication implementation.
+the engine and is not used by authentication. Task 03 configuration lives in app/auth_config.py.
 
 `make_engine()` creates a lazy SQLAlchemy engine. Imports of database, models, application,
 seed helpers and development CLI neither connect nor create tables/files nor insert records.
@@ -48,7 +48,8 @@ No populated legacy enum values are automatically converted.
 <base>
   -> dd093dfa2ebf  original five-table schema
   -> d27f9a18494f  scheduled_at/completed_at
-  -> e20261119db01 corrective schema alignment (single head)
+  -> e20261119db01 corrective schema alignment
+  -> f20261120auth authentication/roles/sessions (single head)
 ```
 
 The two original revision files are unchanged. There are no missing referenced revision IDs
@@ -77,8 +78,9 @@ The source was opened via SQLite URI `mode=ro` and queried with `query_only=ON`.
 Observed counts: 18 players, 3 tournaments, 1 match, 4 registrations, 0 results, 16 wallet rows.
 `integrity_check` returned `ok`; `foreign_key_check` returned no rows. No negative balances,
 non-positive wallet amounts, duplicate registration pairs or duplicate tournament positions
-were found. There is no `alembic_version` table. The six-table schema matches current ORM
-metadata (also verified on a consistent disposable SQLite backup).
+were found. There is no `alembic_version` table. The six-table schema matches the pre-authentication ORM
+metadata. Task 03 verifies migration to the twelve-table schema on a consistent disposable
+backup; the original remains in its six-table state.
 
 An unstamped schema is not an empty database. Running the base migration over it fails on
 existing tables. The repository database has deliberately not been stamped or migrated.
@@ -93,10 +95,9 @@ The migration guide describes review and disposable-copy verification before any
   sufficient funds. There are no DB CHECK constraints preventing negative balances, invalid
   transaction types/amounts or non-finite values written through other paths. Finite-number
   validation needs a separately reviewed API/business rule change.
-- Tournament registration currently commits the fee withdrawal before checking whether the
-  player is already registered. A duplicate request can charge again despite rejection; request
-  rollback cannot undo the earlier committed withdrawal. Race conditions also need an atomic
-  transaction/idempotency design. The unique pair now protects structural duplicates, not fees.
+- The pre-authentication registration route committed fee withdrawal before checking duplicate
+  registration. Task 03 disables fee-bearing registration entirely; Task 04 must implement atomic
+  transactions/idempotency before restoring it. The unique pair protects structural duplicates, not fees.
 - `distribute_prizes()` uses transient `final_standings`, directly changes balances, commits,
   and has no durable distribution marker or ledger entries. Repeating it can distribute twice.
   No prize formula, split or payout behavior was changed in this task.
@@ -104,8 +105,9 @@ The migration guide describes review and disposable-copy verification before any
   do not fully enforce winner membership/score/bye semantics in every service path.
 - Historic orphan records would now be rejected by migration FK validation; no automated
   deletion or repair is provided. Current data has none.
-- Backend mutation endpoints remain unauthenticated and CORS remains permissive. Access
-  control belongs to Task 03; schema stabilization does not make public financial access safe.
+- Task 03 enforces authentication, ownership, organiser assignments and explicit trusted CORS
+  origins. Financial API mutations are disabled for all roles until Task 04. Internal financial
+  services retain their existing calculations and must not be exposed through a bypass.
 
 ## Tests and tooling
 
@@ -129,3 +131,12 @@ removes a duplicate identical pytest-asyncio entry. Frontend dependencies are un
 
 References: [SQLAlchemy SQLite documentation](https://docs.sqlalchemy.org/en/20/dialects/sqlite.html)
 and [Alembic batch migrations](https://alembic.sqlalchemy.org/en/latest/batch.html).
+
+## Task 03 additive identity schema
+
+Six authentication tables follow the existing six financial/domain tables: users, auth_sessions,
+refresh_tokens, tournament_organisers, auth_audit_events and auth_rate_limits. See
+[the security architecture](authentication-security-architecture.md) for fields, ownership and
+permission policy. No existing row is assigned an owner by migration. New authentication
+configuration is validated at application startup without creating schema. Authentication
+downgrade refuses populated identity/session/audit/assignment/rate-limit tables.

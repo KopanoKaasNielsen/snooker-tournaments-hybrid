@@ -30,7 +30,9 @@ def get_player(db: Session, player_id: int):
     return p
 
 
-def create_tournament(db: Session, tournament: schemas.TournamentCreate):
+def create_tournament(
+    db: Session, tournament: schemas.TournamentCreate, *, commit: bool = True
+):
     existing = (
         db.query(models.Tournament)
         .filter(models.Tournament.name == tournament.name)
@@ -55,8 +57,10 @@ def create_tournament(db: Session, tournament: schemas.TournamentCreate):
         entry_fee=tournament.entry_fee,
     )
     db.add(t)
-    db.commit()
-    db.refresh(t)
+    db.flush()
+    if commit:
+        db.commit()
+        db.refresh(t)
     return t
 
 

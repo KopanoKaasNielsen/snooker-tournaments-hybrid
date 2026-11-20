@@ -73,3 +73,5 @@ Thumbs.db
 .env.*
 !.env.example
 *.tmp
+
+!/results/authentication_implementation_report.md

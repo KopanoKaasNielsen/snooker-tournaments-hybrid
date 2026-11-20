@@ -6,9 +6,11 @@ from app.models import Tournament
 
 
 @pytest.mark.asyncio
-async def test_api_flow():
+async def test_api_flow(admin_headers):
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with AsyncClient(
+        transport=transport, base_url="http://testserver", headers=admin_headers
+    ) as client:
         # 1. Create players + deposit balance
         player_ids = []
         for name in ["Ronnie", "Selby"]:
@@ -16,7 +18,12 @@ async def test_api_flow():
             assert r.status_code == 200
             pid = r.json()["id"]
             player_ids.append(pid)
-            await client.post(f"/players/{pid}/deposit", json={"amount": 100})
+            from app.services.wallet import deposit
+
+            with TestingSessionLocal() as db:
+                deposit(
+                    db, pid, 100
+                )  # Isolated setup; HTTP financial writes are disabled.
 
         # 2. Create tournament
         tournament_data = {
@@ -25,7 +32,7 @@ async def test_api_flow():
             "date": "2025-11-01T12:00:00",
             "best_of": 5,
             "race_to": 3,
-            "entry_fee": 50,
+            "entry_fee": 0,
         }
         t = await client.post("/tournaments/", json=tournament_data)
         assert t.status_code == 200

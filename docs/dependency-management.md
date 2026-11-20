@@ -216,3 +216,12 @@ use `git rm -r --cached venv` to untrack generated files while preserving local 
 that staged deletion in a dedicated commit. It will not remove existing blobs from history;
 any history rewrite needs separate approval and coordination. Do not combine that cleanup with
 this dependency task. No such commands were executed.
+
+## Task 03 authentication dependencies
+
+Runtime adds `argon2-cffi==25.1.0` (Argon2id) and `PyJWT==2.15.1` (fixed-algorithm
+JWT signing/validation), with locked argon2-cffi-bindings, cffi and pycparser transitive
+dependencies in the universal constraints file. Existing framework and development pins
+remain unchanged. Both Python matrix versions exercise the same lock; there are no new
+development-only imports in runtime authentication. Security scans use the separate tools
+environment as before; see the authentication report for actual scan results.

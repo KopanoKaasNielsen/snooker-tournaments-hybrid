@@ -13,12 +13,18 @@ anyio==4.16.0
     #   httpx2
     #   starlette
     #   watchfiles
+argon2-cffi==25.1.0
+    # via -r requirements/runtime.in
+argon2-cffi-bindings==26.2.0
+    # via argon2-cffi
 black==26.10.1
     # via -r requirements/development.in
 certifi==2026.10.23
     # via
     #   httpcore
     #   httpx
+cffi==2.1.1
+    # via argon2-cffi-bindings
 click==8.5.1
     # via
     #   black
@@ -81,6 +87,8 @@ platformdirs==4.14.7
     # via black
 pluggy==1.7.0
     # via pytest
+pycparser==3.12 ; implementation_name != 'PyPy'
+    # via cffi
 pydantic==2.12.5
     # via
     #   -r requirements/runtime.in
@@ -92,6 +100,8 @@ pydantic-settings==2.14.2
     # via -r requirements/runtime.in
 pygments==2.21.0
     # via pytest
+pyjwt==2.15.1
+    # via -r requirements/runtime.in
 pytest==9.0.3
     # via
     #   -r requirements/development.in
