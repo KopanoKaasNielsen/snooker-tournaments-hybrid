@@ -11,10 +11,11 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.runtime.migration import MigrationContext
 from sqlalchemy.exc import OperationalError
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, inspect
 
 from app.database import Base, make_engine
 from app.financial_schema import ledger_triggers_match
+from app.operation_schema import operation_triggers_match
 from app.db_cli import migration_config
 from app import models  # noqa: F401
 
@@ -58,12 +59,18 @@ def verify_existing_copy(source: Path, target: Path) -> None:
             differences = compare_metadata(
                 MigrationContext.configure(connection), Base.metadata
             )
-        if not differences:
-            with engine.connect() as connection:
+        with engine.connect() as connection:
+            if inspect(connection).has_table("financial_wallets"):
                 if not ledger_triggers_match(connection):
                     raise RuntimeError(
                         "Financial ledger trigger mismatch; review required, no stamping performed"
                     )
+            if inspect(connection).has_table(
+                "financial_operations"
+            ) and not operation_triggers_match(connection):
+                raise RuntimeError(
+                    "Operation trigger mismatch; review required, no stamping performed"
+                )
         legacy = MetaData()
         for name in (
             "players",
@@ -80,15 +87,30 @@ def verify_existing_copy(source: Path, target: Path) -> None:
             )
         pre_financial = MetaData()
         for name, table in Base.metadata.tables.items():
-            if name not in ("financial_wallets", "financial_ledger_entries"):
+            if name not in (
+                "financial_wallets",
+                "financial_ledger_entries",
+                "financial_operations",
+                "financial_operation_audit",
+            ):
                 table.to_metadata(pre_financial)
         with engine.connect() as connection:
             pre_financial_differences = compare_metadata(
                 MigrationContext.configure(connection), pre_financial
             )
+        pre_operations = MetaData()
+        for name, table in Base.metadata.tables.items():
+            if name not in ("financial_operations", "financial_operation_audit"):
+                table.to_metadata(pre_operations)
+        with engine.connect() as connection:
+            pre_operations_differences = compare_metadata(
+                MigrationContext.configure(connection), pre_operations
+            )
         supported_baseline = (
-            revision in (None, "e20261119db01") and not legacy_differences
-        ) or (revision in (None, "f20261120auth") and not pre_financial_differences)
+            (revision in (None, "e20261119db01") and not legacy_differences)
+            or (revision in (None, "f20261120auth") and not pre_financial_differences)
+            or (revision in (None, "g20261120fin") and not pre_operations_differences)
+        )
         if differences and not supported_baseline:
             raise RuntimeError(
                 "Existing schema differs from ORM; review required, no stamping performed"
@@ -112,7 +134,15 @@ def verify_existing_copy(source: Path, target: Path) -> None:
             adoption_revision = (
                 "head"
                 if not differences
-                else "e20261119db01" if not legacy_differences else "f20261120auth"
+                else (
+                    "e20261119db01"
+                    if not legacy_differences
+                    else (
+                        "f20261120auth"
+                        if not pre_financial_differences
+                        else "g20261120fin"
+                    )
+                )
             )
             print(
                 f"Explicit disposable-copy stamp: {adoption_revision}; original remains untouched."
@@ -125,6 +155,7 @@ def verify_existing_copy(source: Path, target: Path) -> None:
             assert ledger_triggers_match(
                 connection
             ), "Financial ledger trigger mismatch"
+            assert operation_triggers_match(connection), "Operation trigger mismatch"
         with sqlite3.connect(target) as copy:
             after = snapshot(copy)
             assert all(
@@ -166,10 +197,13 @@ def main() -> None:
                 assert ledger_triggers_match(
                     connection
                 ), "Financial ledger trigger mismatch"
+                assert operation_triggers_match(
+                    connection
+                ), "Operation trigger mismatch"
         finally:
             checked.dispose()
         print(
-            "Fresh migration, ORM consistency, ledger triggers, empty downgrade and re-upgrade passed."
+            "Fresh migration, ORM consistency, ledger/operation triggers, empty downgrade and re-upgrade passed."
         )
         if args.existing_copy_from:
             verify_existing_copy(args.existing_copy_from, root / "existing-copy.db")

@@ -18,7 +18,7 @@ from app.db_cli import migration_config
 from app.init_db import DEFAULT_PLAYERS
 
 ROOT = Path(__file__).resolve().parents[1]
-HEAD = "g20261120fin"
+HEAD = "h20261120ops"
 
 
 def configuration(tmp_path):
@@ -30,6 +30,7 @@ def test_revision_graph_has_one_complete_head(tmp_path):
     assert script.get_heads() == [HEAD]
     assert [revision.revision for revision in script.walk_revisions()] == [
         HEAD,
+        "g20261120fin",
         "f20261120auth",
         "e20261119db01",
         "d27f9a18494f",
@@ -180,7 +181,7 @@ def test_failed_migration_rolls_back_ddl_and_revision(tmp_path):
     command.upgrade(config, "head")
     (copy / "versions" / "test_failure.py").write_text(
         "from alembic import op\nimport sqlalchemy as sa\n"
-        "revision = 'test_failure'\ndown_revision = 'g20261120fin'\n"
+        "revision = 'test_failure'\ndown_revision = 'h20261120ops'\n"
         "def upgrade():\n"
         "    op.create_table('must_rollback', sa.Column('id', sa.Integer()))\n"
         "    raise RuntimeError('deliberate failure')\n"
@@ -396,7 +397,9 @@ def test_migrated_financial_ledger_triggers_match_metadata_and_are_effective(tmp
         with migrated.connect() as db:
             actual = dict(
                 db.execute(
-                    text("SELECT name, sql FROM sqlite_master WHERE type='trigger'")
+                    text(
+                        "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='financial_ledger_entries'"
+                    )
                 ).all()
             )
             assert set(actual) == set(TRIGGERS)
@@ -410,3 +413,115 @@ def test_migrated_financial_ledger_triggers_match_metadata_and_are_effective(tmp
         assert service.reconcile()[0].consistent
     finally:
         migrated.dispose()
+
+
+def test_operation_migration_preserves_existing_wallets_ledger_and_auth(tmp_path):
+    import sqlite3
+    from contextlib import closing
+    from decimal import Decimal
+    from uuid import uuid4
+    from app.models import Player, User
+    from app.operation_schema import OPERATION_TRIGGERS, operation_triggers_match
+    from app.services.financial_wallets import FinancialWalletService
+    from scripts.verify_migrations import snapshot, verify_existing_copy
+
+    config = configuration(tmp_path)
+    command.upgrade(config, "g20261120fin")
+    engine = make_engine(config.attributes["database_url"])
+    try:
+        with sessionmaker(bind=engine)() as db:
+            player = Player(name="Preserve existing exact funds")
+            db.add(player)
+            db.flush()
+            db.add(
+                User(
+                    username="preserved_owner",
+                    password_hash="test-only-no-login",
+                    player_id=player.id,
+                )
+            )
+            db.commit()
+            pid = player.id
+        wallet_service = FinancialWalletService(engine)
+        wallet = wallet_service.open_wallet(pid, currency="BWP")
+        wallet_service.post(
+            wallet.id,
+            kind="deposit",
+            amount=Decimal("10.00"),
+            currency="BWP",
+            idempotency_key=str(uuid4()),
+        )
+        source = tmp_path / "migration.db"
+        with closing(sqlite3.connect(source)) as db:
+            before = snapshot(db)
+        # Compatibility tool must support a versioned, populated Task 04A source.
+        verify_existing_copy(source, tmp_path / "versioned-compatible-copy.db")
+        command.upgrade(config, "head")
+        command.check(config)
+        with closing(sqlite3.connect(source)) as db:
+            after = snapshot(db)
+        assert all(after[name] == rows for name, rows in before.items())
+        assert after["financial_operations"] == after["financial_operation_audit"] == []
+        with engine.connect() as db:
+            assert operation_triggers_match(db)
+            actual = dict(
+                db.execute(
+                    text("SELECT name,sql FROM sqlite_master WHERE type='trigger'")
+                ).all()
+            )
+            assert all(
+                " ".join(actual[name].split()) == " ".join(sql.split())
+                for name, sql in OPERATION_TRIGGERS.items()
+            )
+        command.downgrade(config, "g20261120fin")
+        with closing(sqlite3.connect(source)) as db:
+            assert snapshot(db) == before
+        command.upgrade(config, "head")
+        assert wallet_service.reconcile()[0].balance == Decimal("10.00")
+    finally:
+        engine.dispose()
+
+
+def test_populated_operations_downgrade_is_refused(tmp_path):
+    from decimal import Decimal
+    from uuid import uuid4
+    from app.models import Player, User, FinancialOperation
+    from app.security import create_session
+    from app.services.financial_wallets import FinancialWalletService
+    from app.services.financial_operations import FinancialOperationService
+
+    config = configuration(tmp_path)
+    command.upgrade(config, "head")
+    engine = make_engine(config.attributes["database_url"])
+    try:
+        with sessionmaker(bind=engine)() as db:
+            player = Player(name="Operation history must stay")
+            db.add(player)
+            db.flush()
+            user = User(
+                username="operation_owner",
+                password_hash="test-only-not-used",
+                player_id=player.id,
+            )
+            db.add(user)
+            db.flush()
+            token, _ = create_session(db, user)
+            db.commit()
+            pid = player.id
+        wallet = FinancialWalletService(engine).open_wallet(pid, currency="BWP")
+        operation = FinancialOperationService(engine).request(
+            token,
+            wallet.id,
+            kind="deposit",
+            amount=Decimal("1"),
+            currency="BWP",
+            idempotency_key=str(uuid4()),
+        )
+        with pytest.raises(RuntimeError, match="Populated financial operations"):
+            command.downgrade(config, "g20261120fin")
+        with sessionmaker(bind=engine)() as db:
+            assert db.get(FinancialOperation, operation.id).status == "PENDING"
+        with engine.connect() as db:
+            assert MigrationContext.configure(db).get_current_revision() == HEAD
+    finally:
+        engine.dispose()

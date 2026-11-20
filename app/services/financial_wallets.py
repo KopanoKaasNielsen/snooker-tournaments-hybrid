@@ -192,65 +192,116 @@ class FinancialWalletService:
         if not isinstance(kind, str) or kind not in CREDITS | DEBITS:
             raise FinancialError("Invalid posting kind")
         with self._transaction(write=True) as db:
-            previous = db.scalar(
-                select(FinancialLedgerEntry).where(
-                    FinancialLedgerEntry.idempotency_key == idempotency_key
-                )
-            )
-            if previous is not None:
-                if (
-                    previous.wallet_id,
-                    previous.currency,
-                    previous.kind,
-                    previous.amount_minor,
-                ) != (wallet_id, currency, kind, units):
-                    raise IdempotencyConflict(
-                        "Idempotency key belongs to a different posting payload"
-                    )
-                return _receipt(previous)
-            wallet = db.get(FinancialWallet, wallet_id)
-            if wallet is None:
-                raise FinancialError("Wallet not found")
-            if wallet.currency != currency:
-                raise FinancialError("Wallet currency mismatch")
-            if not legacy_is_pristine(db, wallet.player_id):
-                raise LegacyAdoptionRequired(
-                    "Legacy activity detected; no currency or balance conversion is authorised"
-                )
-            delta = units if kind in CREDITS else -units
-            row = db.execute(
-                update(FinancialWallet)
-                .where(
-                    FinancialWallet.id == wallet_id,
-                    FinancialWallet.balance_minor + delta >= 0,
-                    FinancialWallet.balance_minor + delta <= MAX_MINOR,
-                    FinancialWallet.sequence < MAX_MINOR,
-                )
-                .values(
-                    balance_minor=FinancialWallet.balance_minor + delta,
-                    sequence=FinancialWallet.sequence + 1,
-                )
-                .returning(FinancialWallet.balance_minor, FinancialWallet.sequence)
-            ).first()
-            if row is None:
-                if kind in DEBITS:
-                    raise InsufficientFunds("Insufficient balance")
-                raise FinancialError("Wallet balance or sequence limit exceeded")
-            after, sequence = row
-            entry = FinancialLedgerEntry(
-                id=str(uuid4()),
-                idempotency_key=idempotency_key,
-                wallet_id=wallet_id,
-                currency=currency,
+            return self._post_in_session(
+                db,
+                wallet_id,
                 kind=kind,
-                amount_minor=units,
-                balance_before_minor=after - delta,
-                balance_after_minor=after,
-                sequence=sequence,
+                amount=amount,
+                currency=currency,
+                idempotency_key=idempotency_key,
             )
-            db.add(entry)
-            db.flush()  # DB constraints, chain checks and uniqueness precede commit.
-            result = _receipt(entry)
+
+    def _post_in_session(
+        self,
+        db,
+        wallet_id: str,
+        *,
+        kind: str,
+        amount: Decimal,
+        currency: str,
+        idempotency_key: str,
+        _operation_id: str | None = None,
+    ) -> Receipt:
+        """Private participant: caller MUST own this service's existing transaction; no commit."""
+        from sqlalchemy import inspect
+        from app.models import FinancialOperation
+
+        units = to_minor_units(amount, currency=currency)
+        _key(idempotency_key)
+        if not isinstance(kind, str) or kind not in CREDITS | DEBITS:
+            raise FinancialError("Invalid posting kind")
+        if db.get_bind() is not self.engine or not db.in_transaction():
+            raise FinancialError("Posting participant requires the owning transaction")
+        if inspect(db.connection()).has_table("financial_operations"):
+            reserved = db.scalar(
+                select(FinancialOperation).where(
+                    (FinancialOperation.id == idempotency_key)
+                    | (FinancialOperation.idempotency_key == idempotency_key)
+                )
+            )
+            if reserved is not None and (
+                _operation_id != reserved.id
+                or idempotency_key != reserved.id
+                or reserved.status != "VERIFIED"
+                or reserved.wallet_id != wallet_id
+                or reserved.amount_minor != units
+                or reserved.currency != currency
+                or reserved.kind != kind
+            ):
+                raise FinancialError(
+                    "Operation-managed key requires its coordinated posting workflow"
+                )
+            if _operation_id is not None and reserved is None:
+                raise FinancialError("Coordinated operation not found")
+        previous = db.scalar(
+            select(FinancialLedgerEntry).where(
+                FinancialLedgerEntry.idempotency_key == idempotency_key
+            )
+        )
+        if previous is not None:
+            if (
+                previous.wallet_id,
+                previous.currency,
+                previous.kind,
+                previous.amount_minor,
+            ) != (wallet_id, currency, kind, units):
+                raise IdempotencyConflict(
+                    "Idempotency key belongs to a different posting payload"
+                )
+            return _receipt(previous)
+        wallet = db.get(FinancialWallet, wallet_id)
+        if wallet is None:
+            raise FinancialError("Wallet not found")
+        if wallet.currency != currency:
+            raise FinancialError("Wallet currency mismatch")
+        if not legacy_is_pristine(db, wallet.player_id):
+            raise LegacyAdoptionRequired(
+                "Legacy activity detected; no currency or balance conversion is authorised"
+            )
+        delta = units if kind in CREDITS else -units
+        row = db.execute(
+            update(FinancialWallet)
+            .where(
+                FinancialWallet.id == wallet_id,
+                FinancialWallet.balance_minor + delta >= 0,
+                FinancialWallet.balance_minor + delta <= MAX_MINOR,
+                FinancialWallet.sequence < MAX_MINOR,
+            )
+            .values(
+                balance_minor=FinancialWallet.balance_minor + delta,
+                sequence=FinancialWallet.sequence + 1,
+            )
+            .returning(FinancialWallet.balance_minor, FinancialWallet.sequence)
+        ).first()
+        if row is None:
+            if kind in DEBITS:
+                raise InsufficientFunds("Insufficient balance")
+            raise FinancialError("Wallet balance or sequence limit exceeded")
+        after, sequence = row
+        entry = FinancialLedgerEntry(
+            id=str(uuid4()),
+            idempotency_key=idempotency_key,
+            wallet_id=wallet_id,
+            currency=currency,
+            kind=kind,
+            amount_minor=units,
+            balance_before_minor=after - delta,
+            balance_after_minor=after,
+            sequence=sequence,
+        )
+        db.add(entry)
+        db.flush()  # DB constraints, chain checks and uniqueness precede commit.
+        result = _receipt(entry)
         return result
 
     def reconcile(self) -> tuple[Reconciliation, ...]:

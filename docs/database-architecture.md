@@ -50,7 +50,8 @@ No populated legacy enum values are automatically converted.
   -> d27f9a18494f  scheduled_at/completed_at
   -> e20261119db01 corrective schema alignment
   -> f20261120auth authentication/roles/sessions
-  -> g20261120fin exact BWP wallet/ledger foundation (single head)
+  -> g20261120fin exact BWP wallet/ledger foundation
+  -> h20261120ops financial operations/audit (single head)
 ```
 
 The two original revision files are unchanged. There are no missing referenced revision IDs
@@ -151,3 +152,12 @@ No historical monetary column or record is converted; existing currency remains 
 New wallet creation refuses players with legacy balance/history. Financial HTTP writes remain
 disabled. New financial downgrade refuses populated account/ledger tables. Current schema
 verification also validates ledger trigger SQL; ORM metadata comparison alone does not cover it.
+
+## Task 04B operation tables
+
+Financial operations and their append-only audit add two tables to the 14-table foundation.
+Current head is h20261120ops. State/owner/receipt guards and verification boundaries are in
+[financial operations architecture](financial-operations-architecture.md). Existing tables/rows
+and all historical currencies remain unchanged. No payment adapter or HTTP financial mutation
+is activated. Table metadata and both sets of trigger definitions are verified on disposable
+fresh databases and compatible copies.

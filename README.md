@@ -238,3 +238,24 @@ The BWP command covers only the new tables; empty wallets do not reconcile histo
 See the [risk assessment](docs/financial-risk-assessment.md) and
 [implementation report](results/financial_integrity_foundation_report.md). Historical adoption,
 financial HTTP activation and prize-rule changes still require separate approval.
+
+## Internal financial operations (Task 04B)
+
+The [operation architecture](docs/financial-operations-architecture.md) adds authenticated internal
+PENDING/VERIFIED/POSTED/REJECTED/CANCELLED workflows, UUID4 retry identity, digest-only evidence,
+independent administrator review, immutable audit and operation-to-ledger reconciliation. Revision
+`h20261120ops` adds two empty tables and six guards; no historical money or prize logic changes.
+
+There are no financial operation HTTP endpoints, provider integrations or enabled deposit,
+withdrawal, entry-fee or payout HTTP writes. The default evidence verifier refuses verification.
+Passing adapters exist only in tests; VERIFIED is not settlement and POSTED is a local ledger
+commit. `FinancialOperationService` methods take real access tokens and enforce current database
+identity/role/ownership, including before idempotent replay.
+
+Operation posting uses the existing wallet primitive inside one shared SQLite transaction with
+the operation state, receipt link and audit. Failed transactions leave VERIFIED with no posting;
+a committed response-loss retry returns the original POSTED receipt. Existing standalone Task
+04A entries are counted separately, never assigned invented operations. Run wallet reconciliation
+and operation reconciliation for their distinct scopes. See the
+[implementation report](results/financial_operations_implementation_report.md). External provider
+adapters, financial HTTP writes and historical adoption still need separate approval.

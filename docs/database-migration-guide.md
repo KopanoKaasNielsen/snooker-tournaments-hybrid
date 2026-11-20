@@ -68,7 +68,7 @@ python -m alembic upgrade head
 python -m alembic check
 ```
 
-The expected single head is `g20261120fin`; history contains five revisions. An empty fresh
+The expected single head is `h20261120ops`; history contains six revisions. An empty fresh
 schema can be downgraded and rebuilt:
 
 ```bash
@@ -99,7 +99,7 @@ This opens the source read-only and uses SQLite backup into a unique temporary d
 It verifies source-copy integrity, foreign keys and schema equivalence against the pre-authentication
 or current ORM metadata. For an unversioned, schema-matched copy it demonstrates direct-upgrade
 rejection, explicitly announces stamping **the disposable copy** at the matching baseline
-(`e20261119db01` for the six-table original), then upgrades to `g20261120fin`, runs current/check
+(`e20261119db01` for the six-table original), then upgrades to `h20261120ops`, runs current/check
 and compares all original application rows. Added authentication tables must be empty.
 The temporary copy is removed on completion. The original is never stamped.
 
@@ -161,3 +161,13 @@ Unversioned current schemas missing required ledger triggers are refused before 
 Populated financial downgrade is refused, including a zero-balance wallet with no ledger entries.
 See the financial architecture for the separately approved adoption procedure still required
 before any historical conversion or API activation.
+
+## Financial operation revision
+
+`h20261120ops` creates only financial_operations, financial_operation_audit, constraints/indexes
+and six state/audit protections. It never backfills operation IDs onto existing ledger rows.
+Populated operations/audit cannot be downgraded; an empty operation schema can be downgraded
+to g20261120fin while preserving funded wallets and their ledger. Versioned Task 04A copies are
+verified at their matching schema and upgraded on disposable backups only. Missing ledger or
+operation triggers are refused before copy stamping. SQLite-only support and the ban on original
+snooker.db migration/adoption remain unchanged.

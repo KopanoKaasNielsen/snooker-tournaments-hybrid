@@ -330,3 +330,6 @@ class FinancialLedgerEntry(Base):
 from app.financial_schema import attach_ledger_triggers
 
 attach_ledger_triggers(FinancialLedgerEntry.__table__)
+
+# Register additive operation metadata without database I/O.
+from app.financial_operation_models import FinancialOperation, FinancialOperationAudit
