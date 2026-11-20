@@ -68,7 +68,7 @@ python -m alembic upgrade head
 python -m alembic check
 ```
 
-The expected single head is `f20261120auth`; history contains four revisions. An empty fresh
+The expected single head is `g20261120fin`; history contains five revisions. An empty fresh
 schema can be downgraded and rebuilt:
 
 ```bash
@@ -99,7 +99,7 @@ This opens the source read-only and uses SQLite backup into a unique temporary d
 It verifies source-copy integrity, foreign keys and schema equivalence against the pre-authentication
 or current ORM metadata. For an unversioned, schema-matched copy it demonstrates direct-upgrade
 rejection, explicitly announces stamping **the disposable copy** at the matching baseline
-(`e20261119db01` for the six-table original), then upgrades to `f20261120auth`, runs current/check
+(`e20261119db01` for the six-table original), then upgrades to `g20261120fin`, runs current/check
 and compares all original application rows. Added authentication tables must be empty.
 The temporary copy is removed on completion. The original is never stamped.
 
@@ -148,3 +148,16 @@ Use the patched formatter and clean external environment documented in
 [dependency management](dependency-management.md), rather than reinstalling the old vulnerable
 Black pin from the Task 02 baseline. Existing virtualenv files happen to be tracked in this
 repository; no untracking or history cleanup was performed during stabilization.
+
+## Financial foundation revision
+
+`g20261120fin` adds two initially empty BWP wallet/ledger tables plus three integrity triggers.
+It never backfills existing balances, ledgers, tournament fees or contributions and does not
+assume historical currency. The revision and service explicitly support SQLite only.
+`verify_migrations` validates fresh upgrade/check/empty roundtrip and installed trigger SQL.
+Versioned pre-financial/auth schemas and the six-table pre-authentication original are accepted
+only when their schema matches the supported baseline, and upgraded only on disposable copies.
+Unversioned current schemas missing required ledger triggers are refused before copy stamping.
+Populated financial downgrade is refused, including a zero-balance wallet with no ledger entries.
+See the financial architecture for the separately approved adoption procedure still required
+before any historical conversion or API activation.

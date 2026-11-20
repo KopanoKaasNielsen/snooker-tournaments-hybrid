@@ -188,3 +188,53 @@ python -m scripts.verify_migrations --existing-copy-from snooker.db
 
 These commands only migrate disposable databases. The OpenAPI snapshot is preserved; optional
 framework validation-error details are distinguished from application contract changes.
+
+## Exact-money financial foundation (Task 04A)
+
+The [financial architecture](docs/financial-integrity-architecture.md) implements the approved
+new BWP subledger: two decimal places (100 thebe/pula), Decimal arithmetic, bounded integer
+minor units, atomic postings, UUID4 idempotency keys and append-only ledger protections.
+Historical balances, ledgers, fees and contributions have **unknown currency** and are not
+converted or copied. New accounts require explicit BWP and pristine zero-balance/no-history
+players. Existing wallet HTTP reads remain on the legacy contract. Every financial mutation
+HTTP operation remains disabled, including deposits, withdrawals, entry fees and payouts.
+
+On a **new disposable development database**, the existing init/upgrade commands apply additive
+revision `g20261120fin`. No account or credit is seeded. Internal development use after migration:
+
+```python
+from decimal import Decimal
+from uuid import uuid4
+from app.database import make_engine
+from app.services.financial_wallets import FinancialWalletService
+
+engine = make_engine("sqlite:////tmp/approved-dev.db")
+service = FinancialWalletService(engine)
+# player_id must already exist, with no legacy balance or transaction history.
+account = service.open_wallet(player_id, currency="BWP")
+# Development-only example; not proof of external funding or HTTP activation.
+key = str(uuid4())  # retain this SAME key for retries of this operation
+receipt = service.post(account.id, kind="deposit", amount=Decimal("1.00"),
+                       currency="BWP", idempotency_key=key)
+assert service.reconcile()[0].consistent
+engine.dispose()
+```
+
+Sub-thebe postings and float/bool/string/integer coercions are rejected. Explicit calculation
+rounding is separately authorised and HALF_EVEN; existing prize calculations are unchanged.
+SQLite BEGIN IMMEDIATE serialises writers before reading balances/idempotency state; bounded
+busy failures require retrying the complete unit with the same key. PostgreSQL is explicitly
+unsupported by the new service/migration pending schema, row-lock and retry verification.
+
+Read-only diagnostics (never repair, round, create missing files or authorise adoption):
+
+```bash
+python -m scripts.audit_legacy_finances --database snooker.db
+python -m scripts.reconcile_financial_wallets --database /tmp/approved-dev.db
+```
+
+Exit codes are 0 = no findings, 1 = reconciliation/integrity findings, 2 = inspection failure.
+The BWP command covers only the new tables; empty wallets do not reconcile historical funds.
+See the [risk assessment](docs/financial-risk-assessment.md) and
+[implementation report](results/financial_integrity_foundation_report.md). Historical adoption,
+financial HTTP activation and prize-rule changes still require separate approval.

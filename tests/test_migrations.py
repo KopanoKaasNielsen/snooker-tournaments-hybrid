@@ -18,7 +18,7 @@ from app.db_cli import migration_config
 from app.init_db import DEFAULT_PLAYERS
 
 ROOT = Path(__file__).resolve().parents[1]
-HEAD = "f20261120auth"
+HEAD = "g20261120fin"
 
 
 def configuration(tmp_path):
@@ -30,6 +30,7 @@ def test_revision_graph_has_one_complete_head(tmp_path):
     assert script.get_heads() == [HEAD]
     assert [revision.revision for revision in script.walk_revisions()] == [
         HEAD,
+        "f20261120auth",
         "e20261119db01",
         "d27f9a18494f",
         "dd093dfa2ebf",
@@ -179,7 +180,7 @@ def test_failed_migration_rolls_back_ddl_and_revision(tmp_path):
     command.upgrade(config, "head")
     (copy / "versions" / "test_failure.py").write_text(
         "from alembic import op\nimport sqlalchemy as sa\n"
-        "revision = 'test_failure'\ndown_revision = 'f20261120auth'\n"
+        "revision = 'test_failure'\ndown_revision = 'g20261120fin'\n"
         "def upgrade():\n"
         "    op.create_table('must_rollback', sa.Column('id', sa.Integer()))\n"
         "    raise RuntimeError('deliberate failure')\n"
@@ -281,5 +282,131 @@ def test_auth_downgrade_refuses_populated_authentication_tables(tmp_path):
                 connection.scalar(text("SELECT username FROM users")) == "keep_account"
             )
             assert MigrationContext.configure(connection).get_current_revision() == HEAD
+    finally:
+        migrated.dispose()
+
+
+def test_financial_additive_migration_preserves_all_existing_data(tmp_path):
+    import sqlite3
+    from contextlib import closing
+    from scripts.verify_migrations import snapshot
+    from app.models import (
+        Player,
+        Tournament,
+        TournamentRegistration,
+        WalletTransaction,
+        User,
+    )
+
+    config = configuration(tmp_path)
+    command.upgrade(config, "f20261120auth")
+    migrated = make_engine(config.attributes["database_url"])
+    try:
+        with sessionmaker(bind=migrated)() as db:
+            player = Player(name="Unknown currency preserved", balance=123.456789)
+            tournament = Tournament(name="Historical price", entry_fee=17)
+            db.add_all([player, tournament])
+            db.flush()
+            db.add_all(
+                [
+                    WalletTransaction(
+                        player_id=player.id, type="deposit", amount=123.456789
+                    ),
+                    TournamentRegistration(
+                        player_id=player.id,
+                        tournament_id=tournament.id,
+                        contribution=11,
+                        paid=True,
+                    ),
+                    User(
+                        username="existing_account",
+                        password_hash="preserved-test-hash",
+                        player_id=player.id,
+                    ),
+                ]
+            )
+            db.commit()
+        target = tmp_path / "migration.db"
+        with closing(sqlite3.connect(target)) as db:
+            before = snapshot(db)
+        command.upgrade(config, "head")
+        command.check(config)
+        with closing(sqlite3.connect(target)) as db:
+            after = snapshot(db)
+        assert all(after[name] == rows for name, rows in before.items())
+        assert after["financial_wallets"] == after["financial_ledger_entries"] == []
+        command.downgrade(config, "f20261120auth")
+        with closing(sqlite3.connect(target)) as db:
+            assert snapshot(db) == before
+        command.upgrade(config, "head")
+        command.check(config)
+    finally:
+        migrated.dispose()
+
+
+def test_financial_populated_downgrade_is_refused(tmp_path):
+    from app.models import Player
+    from app.services.financial_wallets import FinancialWalletService
+
+    config = configuration(tmp_path)
+    command.upgrade(config, "head")
+    migrated = make_engine(config.attributes["database_url"])
+    try:
+        with sessionmaker(bind=migrated)() as db:
+            player = Player(name="Do not drop exact account")
+            db.add(player)
+            db.commit()
+            pid = player.id
+        account = FinancialWalletService(migrated).open_wallet(pid, currency="BWP")
+        with pytest.raises(RuntimeError, match="Populated financial data"):
+            command.downgrade(config, "f20261120auth")
+        with migrated.connect() as db:
+            assert db.scalar(text("SELECT id FROM financial_wallets")) == account.id
+            assert MigrationContext.configure(db).get_current_revision() == HEAD
+    finally:
+        migrated.dispose()
+
+
+def test_migrated_financial_ledger_triggers_match_metadata_and_are_effective(tmp_path):
+    from decimal import Decimal
+    from uuid import uuid4
+    from sqlalchemy.exc import IntegrityError
+    from app.financial_schema import TRIGGERS
+    from app.models import Player
+    from app.services.financial_wallets import FinancialWalletService
+
+    config = configuration(tmp_path)
+    command.upgrade(config, "head")
+    migrated = make_engine(config.attributes["database_url"])
+    try:
+        with sessionmaker(bind=migrated)() as db:
+            player = Player(name="Migrated trigger check")
+            db.add(player)
+            db.commit()
+            pid = player.id
+        service = FinancialWalletService(migrated)
+        account = service.open_wallet(pid, currency="BWP")
+        service.post(
+            account.id,
+            kind="deposit",
+            amount=Decimal("0.30"),
+            currency="BWP",
+            idempotency_key=str(uuid4()),
+        )
+        with migrated.connect() as db:
+            actual = dict(
+                db.execute(
+                    text("SELECT name, sql FROM sqlite_master WHERE type='trigger'")
+                ).all()
+            )
+            assert set(actual) == set(TRIGGERS)
+            assert all(
+                " ".join(actual[name].split()) == " ".join(sql.split())
+                for name, sql in TRIGGERS.items()
+            )
+            with pytest.raises(IntegrityError, match="append-only"):
+                db.execute(text("DELETE FROM financial_ledger_entries"))
+            db.rollback()
+        assert service.reconcile()[0].consistent
     finally:
         migrated.dispose()

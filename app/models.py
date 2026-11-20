@@ -6,6 +6,7 @@ import enum
 from app.time import utc_now
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Column,
@@ -13,6 +14,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     String,
     UniqueConstraint,
@@ -245,3 +247,86 @@ class AuthRateLimit(Base):
     bucket = Column(String(64), primary_key=True)
     attempts = Column(Integer, nullable=False)
     expires_at = Column(DateTime, nullable=False)
+
+
+class FinancialWallet(Base):
+    """New BWP wallet; never an inferred conversion of Player.balance."""
+
+    __tablename__ = "financial_wallets"
+    __table_args__ = (
+        UniqueConstraint("id", "currency", name="uq_financial_wallet_currency"),
+        CheckConstraint("currency = 'BWP'", name="currency_bwp"),
+        CheckConstraint(
+            "sequence > 0 OR balance_minor = 0", name="zero_opening_balance"
+        ),
+        CheckConstraint(
+            "typeof(balance_minor) = 'integer' AND balance_minor BETWEEN 0 AND 9000000000000000",
+            name="balance_minor_range",
+        ),
+        CheckConstraint(
+            "typeof(sequence) = 'integer' AND sequence BETWEEN 0 AND 9000000000000000",
+            name="sequence_range",
+        ),
+    )
+    id = Column(String(36), primary_key=True)
+    player_id = Column(Integer, ForeignKey("players.id"), unique=True, nullable=False)
+    currency = Column(String(3), nullable=False)
+    balance_minor = Column(BigInteger, nullable=False, default=0)
+    sequence = Column(BigInteger, nullable=False, default=0)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class FinancialLedgerEntry(Base):
+    """Append-only exact-money receipt, with globally unique retry identity."""
+
+    __tablename__ = "financial_ledger_entries"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["wallet_id", "currency"],
+            ["financial_wallets.id", "financial_wallets.currency"],
+        ),
+        UniqueConstraint("wallet_id", "sequence", name="uq_financial_ledger_sequence"),
+        CheckConstraint(
+            "length(idempotency_key) = 36 AND substr(idempotency_key, 9, 1) = '-' AND substr(idempotency_key, 14, 1) = '-' AND substr(idempotency_key, 19, 1) = '-' AND substr(idempotency_key, 24, 1) = '-' AND substr(idempotency_key, 15, 1) = '4' AND substr(idempotency_key, 20, 1) IN ('8','9','a','b') AND length(replace(idempotency_key, '-', '')) = 32 AND replace(idempotency_key, '-', '') NOT GLOB '*[^0-9a-f]*'",
+            name="idempotency_uuid4",
+        ),
+        CheckConstraint("currency = 'BWP'", name="currency_bwp"),
+        CheckConstraint(
+            "kind IN ('deposit', 'withdrawal', 'fee', 'prize')", name="posting_kind"
+        ),
+        CheckConstraint(
+            "typeof(amount_minor) = 'integer' AND amount_minor BETWEEN 1 AND 9000000000000000",
+            name="amount_minor_range",
+        ),
+        CheckConstraint(
+            "typeof(balance_before_minor) = 'integer' AND balance_before_minor BETWEEN 0 AND 9000000000000000",
+            name="balance_before_range",
+        ),
+        CheckConstraint(
+            "typeof(balance_after_minor) = 'integer' AND balance_after_minor BETWEEN 0 AND 9000000000000000",
+            name="balance_after_range",
+        ),
+        CheckConstraint(
+            "typeof(sequence) = 'integer' AND sequence BETWEEN 1 AND 9000000000000000",
+            name="sequence_range",
+        ),
+        CheckConstraint(
+            "(kind IN ('deposit', 'prize') AND balance_after_minor = balance_before_minor + amount_minor) OR (kind IN ('withdrawal', 'fee') AND balance_after_minor = balance_before_minor - amount_minor)",
+            name="posting_arithmetic",
+        ),
+    )
+    id = Column(String(36), primary_key=True)
+    idempotency_key = Column(String(36), unique=True, nullable=False)
+    wallet_id = Column(String(36), nullable=False)
+    currency = Column(String(3), nullable=False)
+    kind = Column(String(20), nullable=False)
+    amount_minor = Column(BigInteger, nullable=False)
+    balance_before_minor = Column(BigInteger, nullable=False)
+    balance_after_minor = Column(BigInteger, nullable=False)
+    sequence = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+from app.financial_schema import attach_ledger_triggers
+
+attach_ledger_triggers(FinancialLedgerEntry.__table__)

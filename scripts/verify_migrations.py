@@ -14,6 +14,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy import MetaData
 
 from app.database import Base, make_engine
+from app.financial_schema import ledger_triggers_match
 from app.db_cli import migration_config
 from app import models  # noqa: F401
 
@@ -57,6 +58,12 @@ def verify_existing_copy(source: Path, target: Path) -> None:
             differences = compare_metadata(
                 MigrationContext.configure(connection), Base.metadata
             )
+        if not differences:
+            with engine.connect() as connection:
+                if not ledger_triggers_match(connection):
+                    raise RuntimeError(
+                        "Financial ledger trigger mismatch; review required, no stamping performed"
+                    )
         legacy = MetaData()
         for name in (
             "players",
@@ -71,7 +78,18 @@ def verify_existing_copy(source: Path, target: Path) -> None:
             legacy_differences = compare_metadata(
                 MigrationContext.configure(connection), legacy
             )
-        if differences and (revision is not None or legacy_differences):
+        pre_financial = MetaData()
+        for name, table in Base.metadata.tables.items():
+            if name not in ("financial_wallets", "financial_ledger_entries"):
+                table.to_metadata(pre_financial)
+        with engine.connect() as connection:
+            pre_financial_differences = compare_metadata(
+                MigrationContext.configure(connection), pre_financial
+            )
+        supported_baseline = (
+            revision in (None, "e20261119db01") and not legacy_differences
+        ) or (revision in (None, "f20261120auth") and not pre_financial_differences)
+        if differences and not supported_baseline:
             raise RuntimeError(
                 "Existing schema differs from ORM; review required, no stamping performed"
             )
@@ -91,7 +109,11 @@ def verify_existing_copy(source: Path, target: Path) -> None:
             print(
                 "Explicit verification-only adoption on disposable, schema-matched copy."
             )
-            adoption_revision = "e20261119db01" if differences else "head"
+            adoption_revision = (
+                "head"
+                if not differences
+                else "e20261119db01" if not legacy_differences else "f20261120auth"
+            )
             print(
                 f"Explicit disposable-copy stamp: {adoption_revision}; original remains untouched."
             )
@@ -99,6 +121,10 @@ def verify_existing_copy(source: Path, target: Path) -> None:
         command.upgrade(config, "head")
         command.current(config)
         command.check(config)
+        with engine.connect() as connection:
+            assert ledger_triggers_match(
+                connection
+            ), "Financial ledger trigger mismatch"
         with sqlite3.connect(target) as copy:
             after = snapshot(copy)
             assert all(
@@ -134,8 +160,16 @@ def main() -> None:
         command.downgrade(config, "base")
         command.upgrade(config, "head")
         command.check(config)
+        checked = make_engine(config.attributes["database_url"])
+        try:
+            with checked.connect() as connection:
+                assert ledger_triggers_match(
+                    connection
+                ), "Financial ledger trigger mismatch"
+        finally:
+            checked.dispose()
         print(
-            "Fresh migration, ORM consistency, empty downgrade and re-upgrade passed."
+            "Fresh migration, ORM consistency, ledger triggers, empty downgrade and re-upgrade passed."
         )
         if args.existing_copy_from:
             verify_existing_copy(args.existing_copy_from, root / "existing-copy.db")

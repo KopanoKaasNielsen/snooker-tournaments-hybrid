@@ -49,7 +49,8 @@ No populated legacy enum values are automatically converted.
   -> dd093dfa2ebf  original five-table schema
   -> d27f9a18494f  scheduled_at/completed_at
   -> e20261119db01 corrective schema alignment
-  -> f20261120auth authentication/roles/sessions (single head)
+  -> f20261120auth authentication/roles/sessions
+  -> g20261120fin exact BWP wallet/ledger foundation (single head)
 ```
 
 The two original revision files are unchanged. There are no missing referenced revision IDs
@@ -140,3 +141,13 @@ refresh_tokens, tournament_organisers, auth_audit_events and auth_rate_limits. S
 permission policy. No existing row is assigned an owner by migration. New authentication
 configuration is validated at application startup without creating schema. Authentication
 downgrade refuses populated identity/session/audit/assignment/rate-limit tables.
+
+## Task 04A exact-money tables
+
+The approved additive revision adds financial_wallets and financial_ledger_entries to the existing
+12 tables. BWP minor units, checks, FKs, unique UUID4 retry keys, append-only/continuity triggers
+and transaction ownership are described in [financial integrity architecture](financial-integrity-architecture.md).
+No historical monetary column or record is converted; existing currency remains unknown.
+New wallet creation refuses players with legacy balance/history. Financial HTTP writes remain
+disabled. New financial downgrade refuses populated account/ledger tables. Current schema
+verification also validates ledger trigger SQL; ORM metadata comparison alone does not cover it.
