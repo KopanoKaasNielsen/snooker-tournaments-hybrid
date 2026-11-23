@@ -333,3 +333,15 @@ attach_ledger_triggers(FinancialLedgerEntry.__table__)
 
 # Register additive operation metadata without database I/O.
 from app.financial_operation_models import FinancialOperation, FinancialOperationAudit
+
+from app.tournament_financial_models import (
+    TournamentFinancialIntent,
+    TournamentFinancialRequest,
+)
+
+from app.tournament_v1_models import (
+    TournamentV1Policy,
+    TournamentPoolAccount,
+    TournamentV1Record,
+    TournamentV1Request,
+)

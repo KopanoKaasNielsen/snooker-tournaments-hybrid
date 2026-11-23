@@ -259,3 +259,24 @@ a committed response-loss retry returns the original POSTED receipt. Existing st
 and operation reconciliation for their distinct scopes. See the
 [implementation report](results/financial_operations_implementation_report.md). External provider
 adapters, financial HTTP writes and historical adoption still need separate approval.
+
+## Tournament financial policy review (Task 04C)
+
+The [audit/architecture](docs/tournament-financial-architecture.md) and
+[policy questions](docs/tournament-financial-policy-questions.md) identify a rule mismatch: current
+code defaults to 100% to the first winner; its test uses 60/30/10. No checked default/call site establishes 50/30/20, and no
+financial 10% token allocation/refund rule is implemented. Those rules need explicit approval.
+
+Revision i20261120tfin adds only immutable POLICY_REQUIRED fee/refund/payout **review identities**
+and request history. Amount, currency, financial operation and ledger receipt remain null; no
+legacy fee is assumed BWP. Current admins/assigned organisers may record reviews; only admins
+reconcile metadata. Core financial services refuse those blocked identifiers as posting keys.
+Actual collection, refunds, payouts and token calculations are unavailable, and financial HTTP
+writes remain disabled. No provider settlement or automatic completion payout is claimed.
+See [the implementation report](results/tournament_financial_implementation_report.md).
+
+### Inactive tournament financial policy (Task 04C Phase 2)
+
+New internal tournaments may explicitly opt into immutable `BWP_TOURNAMENT_V1` BWP/thebe pricing. No existing tournament inherits it. The dedicated pool is non-spendable; paid confirmation, fee collection, sponsorship credits, refunds, tokens and payouts remain blocked. Only free entries, independently approved waivers, eligibility/results reviews and non-postable calculation scenarios are supported internally. All financial HTTP mutations stay disabled.
+
+See [approved policy and activation boundaries](docs/tournament-financial-policy.md), [architecture](docs/tournament-financial-architecture.md), and [remaining policy questions](docs/tournament-financial-policy-questions.md). Revision `j20261120tv1` is additive and refuses populated downgrade; run `python -m scripts.verify_migrations --existing-copy-from snooker.db` to verify fresh migrations and a **disposable read-only-source copy**, never to migrate the original database. The compatibility `entry_fee` field is not authoritative for V1: use the internal policy's explicit `price_minor`; no V1 HTTP API is enabled.

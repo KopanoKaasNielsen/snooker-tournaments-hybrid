@@ -51,7 +51,8 @@ No populated legacy enum values are automatically converted.
   -> e20261119db01 corrective schema alignment
   -> f20261120auth authentication/roles/sessions
   -> g20261120fin exact BWP wallet/ledger foundation
-  -> h20261120ops financial operations/audit (single head)
+  -> h20261120ops financial operations/audit
+  -> i20261120tfin policy-blocked tournament review metadata (single head)
 ```
 
 The two original revision files are unchanged. There are no missing referenced revision IDs
@@ -161,3 +162,11 @@ Current head is h20261120ops. State/owner/receipt guards and verification bounda
 and all historical currencies remain unchanged. No payment adapter or HTTP financial mutation
 is activated. Table metadata and both sets of trigger definitions are verified on disposable
 fresh databases and compatible copies.
+
+## Task 04C policy-neutral review tables
+
+Two immutable review/request tables bring the current metadata to 18 tables. They hold only
+POLICY_REQUIRED identities and provenance: money/currency/operation/receipt must be null.
+No old row is converted and no prize/refund/fee/token policy is introduced. Scope, authority
+and immutable-history triggers are verified alongside the existing financial guards. See the
+tournament financial architecture for why monetary orchestration still awaits approval.

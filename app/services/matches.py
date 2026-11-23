@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from app.models import Match, Player
+from app.tournament_v1_schema import require_legacy_tournament
 from app.services.elo import update_elo_ratings
 
 
@@ -8,6 +9,7 @@ def update_match_result(db: Session, match_id: int, winner_id: int):
     if not match:
         raise ValueError("Match not found")
 
+    require_legacy_tournament(db, match.tournament_id)
     if match.winner_id:
         raise ValueError("Match result already set")
 

@@ -4,6 +4,7 @@ from typing import List
 from . import models, schemas
 from datetime import datetime
 from app.time import utc_now
+from app.tournament_v1_schema import require_legacy_tournament
 
 
 def create_player(db: Session, player: schemas.PlayerCreate):
@@ -79,6 +80,7 @@ def get_tournament(db: Session, tournament_id: int):
 def register_player(
     db: Session, tournament_id: int, player_id: int, player_name: str | None = None
 ):
+    require_legacy_tournament(db, tournament_id)
     tournament = (
         db.query(models.Tournament)
         .filter(models.Tournament.id == tournament_id)
@@ -121,6 +123,7 @@ def register_player(
 def complete_tournament(
     db: Session, tournament_id: int, winners: List[schemas.WinnerCreate]
 ):
+    require_legacy_tournament(db, tournament_id)
     tournament = (
         db.query(models.Tournament)
         .filter(models.Tournament.id == tournament_id)
@@ -159,6 +162,7 @@ def complete_tournament(
 
 
 def create_match(db: Session, match: schemas.MatchCreate):
+    require_legacy_tournament(db, match.tournament_id)
     db_match = models.Match(
         tournament_id=match.tournament_id,
         player1_id=match.player1_id,
@@ -179,6 +183,7 @@ def report_result(db: Session, match_id: int, result: schemas.MatchResult):
     if not db_match:
         raise HTTPException(status_code=404, detail="Match not found")
 
+    require_legacy_tournament(db, db_match.tournament_id)
     # Update match result
     db_match.score_player1 = result.score_player1
     db_match.score_player2 = result.score_player2

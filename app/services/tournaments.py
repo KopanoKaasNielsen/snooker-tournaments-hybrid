@@ -1,6 +1,7 @@
 import random
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
+from app.tournament_v1_schema import require_legacy_tournament
 from app.models import Tournament, Match, Player, TournamentRegistration
 
 
@@ -9,6 +10,7 @@ def distribute_prizes(db: Session, tournament: Tournament, prize_split=(1.0,)):
     Distribute prize pool among top finishers.
     Default: 100% to winner.
     """
+    require_legacy_tournament(db, tournament.id)
     prize_pool = tournament.entry_fee * len(tournament.registrations)
     winners = tournament.final_standings or []
 
@@ -32,6 +34,7 @@ def generate_knockout_matches(db: Session, tournament: Tournament):
     Generate first-round knockout matches.
     Handles byes for odd player counts.
     """
+    require_legacy_tournament(db, tournament.id)
     players = [r.player for r in tournament.registrations]
     if len(players) < 2:
         return []
@@ -72,6 +75,7 @@ def register_player(db: Session, tournament_id: int, player_id: int):
     Register an existing player to a tournament.
     Assumes player already exists (no name creation fallback).
     """
+    require_legacy_tournament(db, tournament_id)
     tournament = db.query(Tournament).filter(Tournament.id == tournament_id).first()
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")

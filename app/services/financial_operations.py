@@ -200,6 +200,12 @@ class FinancialOperationService:
             actor = self._actor(db, access_token)
             units = to_minor_units(amount, currency=currency)
             _key(idempotency_key)
+            from app.tournament_financial_schema import key_reserved
+
+            if key_reserved(db.connection(), idempotency_key):
+                raise FinancialError(
+                    "Tournament policy required before financial operation creation"
+                )
             if kind not in ("deposit", "withdrawal", "fee", "prize"):
                 raise FinancialError("Unsupported operation type")
             wallet = db.get(FinancialWallet, wallet_id)
@@ -241,6 +247,10 @@ class FinancialOperationService:
             ) or db.get(FinancialOperation, idempotency_key):
                 raise OperationConflict("Request key is already reserved")
             identifier = str(uuid4())
+            if key_reserved(db.connection(), identifier):
+                raise OperationConflict(
+                    "Operation identifier is reserved; retry same request key"
+                )
             if db.scalar(
                 select(FinancialLedgerEntry.id).where(
                     FinancialLedgerEntry.idempotency_key == identifier

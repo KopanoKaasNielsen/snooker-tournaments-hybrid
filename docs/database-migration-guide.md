@@ -68,7 +68,7 @@ python -m alembic upgrade head
 python -m alembic check
 ```
 
-The expected single head is `h20261120ops`; history contains six revisions. An empty fresh
+The expected single head is `i20261120tfin`; history contains seven revisions. An empty fresh
 schema can be downgraded and rebuilt:
 
 ```bash
@@ -99,7 +99,7 @@ This opens the source read-only and uses SQLite backup into a unique temporary d
 It verifies source-copy integrity, foreign keys and schema equivalence against the pre-authentication
 or current ORM metadata. For an unversioned, schema-matched copy it demonstrates direct-upgrade
 rejection, explicitly announces stamping **the disposable copy** at the matching baseline
-(`e20261119db01` for the six-table original), then upgrades to `h20261120ops`, runs current/check
+(`e20261119db01` for the six-table original), then upgrades to `i20261120tfin`, runs current/check
 and compares all original application rows. Added authentication tables must be empty.
 The temporary copy is removed on completion. The original is never stamped.
 
@@ -171,3 +171,13 @@ to g20261120fin while preserving funded wallets and their ledger. Versioned Task
 verified at their matching schema and upgraded on disposable backups only. Missing ledger or
 operation triggers are refused before copy stamping. SQLite-only support and the ban on original
 snooker.db migration/adoption remain unchanged.
+
+## Policy-blocked tournament reviews
+
+`i20261120tfin` adds only tournament_financial_intents and tournament_financial_requests with
+scope/authority/immutability checks. No money/price/currency or operation backfill is performed.
+Populated review metadata cannot be downgraded; empty review downgrade preserves funded
+wallets and existing operations. Compatible h20261120ops snapshots are rehearsed only on
+disposable copies. Required review triggers are checked before any copy stamp and after
+fresh upgrade. Do not migrate/stamp the original repository database. Monetary tournament
+rules remain unavailable pending the explicit policy questions.

@@ -23,7 +23,8 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Expanded strict suite recreates the complete financial schema per test.
+    timeout-minutes: 35
     strategy:
       matrix:
         python-version: [3.11, 3.12]

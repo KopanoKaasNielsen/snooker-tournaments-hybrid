@@ -222,6 +222,12 @@ class FinancialWalletService:
             raise FinancialError("Invalid posting kind")
         if db.get_bind() is not self.engine or not db.in_transaction():
             raise FinancialError("Posting participant requires the owning transaction")
+        from app.tournament_financial_schema import key_reserved
+
+        if key_reserved(db.connection(), idempotency_key):
+            raise FinancialError(
+                "Tournament policy required; blocked intent keys cannot post"
+            )
         if inspect(db.connection()).has_table("financial_operations"):
             reserved = db.scalar(
                 select(FinancialOperation).where(

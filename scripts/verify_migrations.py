@@ -16,6 +16,11 @@ from sqlalchemy import MetaData, inspect
 from app.database import Base, make_engine
 from app.financial_schema import ledger_triggers_match
 from app.operation_schema import operation_triggers_match
+from app.tournament_financial_schema import triggers_match as tournament_triggers_match
+from app.tournament_v1_schema import (
+    TABLES as V1_TABLES,
+    triggers_match as v1_triggers_match,
+)
 from app.db_cli import migration_config
 from app import models  # noqa: F401
 
@@ -71,6 +76,11 @@ def verify_existing_copy(source: Path, target: Path) -> None:
                 raise RuntimeError(
                     "Operation trigger mismatch; review required, no stamping performed"
                 )
+        with engine.connect() as connection:
+            if inspect(connection).has_table(
+                "tournament_financial_intents"
+            ) and not tournament_triggers_match(connection):
+                raise RuntimeError("Tournament trigger mismatch; no stamping performed")
         legacy = MetaData()
         for name in (
             "players",
@@ -87,11 +97,13 @@ def verify_existing_copy(source: Path, target: Path) -> None:
             )
         pre_financial = MetaData()
         for name, table in Base.metadata.tables.items():
-            if name not in (
+            if name not in V1_TABLES and name not in (
                 "financial_wallets",
                 "financial_ledger_entries",
                 "financial_operations",
                 "financial_operation_audit",
+                "tournament_financial_intents",
+                "tournament_financial_requests",
             ):
                 table.to_metadata(pre_financial)
         with engine.connect() as connection:
@@ -100,16 +112,46 @@ def verify_existing_copy(source: Path, target: Path) -> None:
             )
         pre_operations = MetaData()
         for name, table in Base.metadata.tables.items():
-            if name not in ("financial_operations", "financial_operation_audit"):
+            if name not in V1_TABLES and name not in (
+                "financial_operations",
+                "financial_operation_audit",
+                "tournament_financial_intents",
+                "tournament_financial_requests",
+            ):
                 table.to_metadata(pre_operations)
         with engine.connect() as connection:
             pre_operations_differences = compare_metadata(
                 MigrationContext.configure(connection), pre_operations
             )
+        pre_tournament = MetaData()
+        for name, table in Base.metadata.tables.items():
+            if name not in V1_TABLES and name not in (
+                "tournament_financial_intents",
+                "tournament_financial_requests",
+            ):
+                table.to_metadata(pre_tournament)
+        with engine.connect() as connection:
+            pre_tournament_differences = compare_metadata(
+                MigrationContext.configure(connection), pre_tournament
+            )
+        pre_v1 = MetaData()
+        for name, table in Base.metadata.tables.items():
+            if name not in V1_TABLES:
+                table.to_metadata(pre_v1)
+        with engine.connect() as connection:
+            pre_v1_differences = compare_metadata(
+                MigrationContext.configure(connection), pre_v1
+            )
+            if inspect(connection).has_table(
+                "tournament_v1_policies"
+            ) and not v1_triggers_match(connection):
+                raise RuntimeError("V1 trigger mismatch; no stamping performed")
         supported_baseline = (
             (revision in (None, "e20261119db01") and not legacy_differences)
             or (revision in (None, "f20261120auth") and not pre_financial_differences)
             or (revision in (None, "g20261120fin") and not pre_operations_differences)
+            or (revision in (None, "h20261120ops") and not pre_tournament_differences)
+            or (revision in (None, "i20261120tfin") and not pre_v1_differences)
         )
         if differences and not supported_baseline:
             raise RuntimeError(
@@ -140,7 +182,15 @@ def verify_existing_copy(source: Path, target: Path) -> None:
                     else (
                         "f20261120auth"
                         if not pre_financial_differences
-                        else "g20261120fin"
+                        else (
+                            "g20261120fin"
+                            if not pre_operations_differences
+                            else (
+                                "h20261120ops"
+                                if not pre_tournament_differences
+                                else "i20261120tfin"
+                            )
+                        )
                     )
                 )
             )
@@ -156,6 +206,8 @@ def verify_existing_copy(source: Path, target: Path) -> None:
                 connection
             ), "Financial ledger trigger mismatch"
             assert operation_triggers_match(connection), "Operation trigger mismatch"
+            assert tournament_triggers_match(connection), "Tournament trigger mismatch"
+            assert v1_triggers_match(connection), "V1 trigger mismatch"
         with sqlite3.connect(target) as copy:
             after = snapshot(copy)
             assert all(
@@ -200,6 +252,10 @@ def main() -> None:
                 assert operation_triggers_match(
                     connection
                 ), "Operation trigger mismatch"
+                assert tournament_triggers_match(
+                    connection
+                ), "Tournament trigger mismatch"
+                assert v1_triggers_match(connection), "V1 trigger mismatch"
         finally:
             checked.dispose()
         print(

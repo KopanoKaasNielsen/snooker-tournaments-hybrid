@@ -18,7 +18,7 @@ from app.db_cli import migration_config
 from app.init_db import DEFAULT_PLAYERS
 
 ROOT = Path(__file__).resolve().parents[1]
-HEAD = "h20261120ops"
+HEAD = "j20261120tv1"
 
 
 def configuration(tmp_path):
@@ -30,6 +30,8 @@ def test_revision_graph_has_one_complete_head(tmp_path):
     assert script.get_heads() == [HEAD]
     assert [revision.revision for revision in script.walk_revisions()] == [
         HEAD,
+        "i20261120tfin",
+        "h20261120ops",
         "g20261120fin",
         "f20261120auth",
         "e20261119db01",
@@ -181,7 +183,7 @@ def test_failed_migration_rolls_back_ddl_and_revision(tmp_path):
     command.upgrade(config, "head")
     (copy / "versions" / "test_failure.py").write_text(
         "from alembic import op\nimport sqlalchemy as sa\n"
-        "revision = 'test_failure'\ndown_revision = 'h20261120ops'\n"
+        "revision = 'test_failure'\ndown_revision = 'j20261120tv1'\n"
         "def upgrade():\n"
         "    op.create_table('must_rollback', sa.Column('id', sa.Integer()))\n"
         "    raise RuntimeError('deliberate failure')\n"
@@ -521,6 +523,138 @@ def test_populated_operations_downgrade_is_refused(tmp_path):
             command.downgrade(config, "g20261120fin")
         with sessionmaker(bind=engine)() as db:
             assert db.get(FinancialOperation, operation.id).status == "PENDING"
+        with engine.connect() as db:
+            assert MigrationContext.configure(db).get_current_revision() == HEAD
+    finally:
+        engine.dispose()
+
+
+def test_tournament_metadata_upgrade_preserves_existing_operations_and_money(tmp_path):
+    import sqlite3
+    from contextlib import closing
+    from decimal import Decimal
+    from uuid import uuid4
+    from app.models import Player, User
+    from app.security import create_session
+    from app.services.financial_wallets import FinancialWalletService
+    from app.services.financial_operations import FinancialOperationService
+    from app.tournament_financial_schema import TRIGGERS, triggers_match
+    from scripts.verify_migrations import snapshot, verify_existing_copy
+
+    config = configuration(tmp_path)
+    command.upgrade(config, "h20261120ops")
+    engine = make_engine(config.attributes["database_url"])
+    try:
+        with sessionmaker(bind=engine)() as db:
+            player = Player(name="Preserve pre-tournament-review records")
+            db.add(player)
+            db.flush()
+            user = User(
+                username="old_operation_owner",
+                password_hash="test-fixture-no-login",
+                player_id=player.id,
+            )
+            db.add(user)
+            db.flush()
+            token, _ = create_session(db, user)
+            db.commit()
+            pid = player.id
+        wallets = FinancialWalletService(engine)
+        wallet = wallets.open_wallet(pid, currency="BWP")
+        wallets.post(
+            wallet.id,
+            kind="deposit",
+            amount=Decimal("12.34"),
+            currency="BWP",
+            idempotency_key=str(uuid4()),
+        )
+        FinancialOperationService(engine).request(
+            token,
+            wallet.id,
+            kind="withdrawal",
+            amount=Decimal("1"),
+            currency="BWP",
+            idempotency_key=str(uuid4()),
+        )
+        source = tmp_path / "migration.db"
+        with closing(sqlite3.connect(source)) as db:
+            before = snapshot(db)
+        verify_existing_copy(source, tmp_path / "h-compatible-copy.db")
+        command.upgrade(config, "head")
+        command.check(config)
+        with closing(sqlite3.connect(source)) as db:
+            after = snapshot(db)
+        assert all(after[name] == rows for name, rows in before.items())
+        assert (
+            after["tournament_financial_intents"]
+            == after["tournament_financial_requests"]
+            == []
+        )
+        with engine.connect() as db:
+            assert triggers_match(db)
+            actual = dict(
+                db.execute(
+                    text("SELECT name,sql FROM sqlite_master WHERE type='trigger'")
+                ).all()
+            )
+            assert all(
+                " ".join(actual[name].split()) == " ".join(sql.split())
+                for name, sql in TRIGGERS.items()
+            )
+        command.downgrade(config, "h20261120ops")
+        with closing(sqlite3.connect(source)) as db:
+            assert snapshot(db) == before
+        command.upgrade(config, "head")
+        command.check(config)
+    finally:
+        engine.dispose()
+
+
+def test_populated_tournament_review_downgrade_is_refused(tmp_path):
+    from uuid import uuid4
+    from app.models import (
+        Player,
+        User,
+        Tournament,
+        TournamentRegistration,
+        TournamentFinancialIntent,
+    )
+    from app.security import create_session
+    from app.services.tournament_financials import TournamentFinancialService
+
+    config = configuration(tmp_path)
+    command.upgrade(config, "head")
+    engine = make_engine(config.attributes["database_url"])
+    try:
+        with sessionmaker(bind=engine)() as db:
+            player = Player(name="Keep blocked financial review")
+            tournament = Tournament(name="Review preservation", entry_fee=17)
+            admin = User(
+                username="review_admin",
+                role="administrator",
+                password_hash="fixture-no-login",
+            )
+            db.add_all([player, tournament, admin])
+            db.flush()
+            registration = TournamentRegistration(
+                tournament_id=tournament.id, player_id=player.id
+            )
+            db.add(registration)
+            db.flush()
+            token, _ = create_session(db, admin)
+            db.commit()
+            rid = registration.id
+        intent = TournamentFinancialService(engine).record_fee_review(
+            token, rid, idempotency_key=str(uuid4())
+        )
+        with pytest.raises(RuntimeError, match="Populated tournament reviews"):
+            command.downgrade(config, "h20261120ops")
+        with sessionmaker(bind=engine)() as db:
+            row = db.get(TournamentFinancialIntent, intent.id)
+            assert (
+                row.status == "POLICY_REQUIRED"
+                and row.currency is row.amount_minor is row.operation_id is None
+            )
         with engine.connect() as db:
             assert MigrationContext.configure(db).get_current_revision() == HEAD
     finally:
